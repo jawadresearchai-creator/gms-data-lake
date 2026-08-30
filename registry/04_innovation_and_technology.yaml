@@ -1,4 +1,4 @@
-﻿domain: "04_INNOVATION_AND_TECHNOLOGY"
+domain: "04_INNOVATION_AND_TECHNOLOGY"
 sources:
   - id: USPTO_ODP
     name: USPTO Open Data Portal bulk products
@@ -69,13 +69,13 @@ sources:
     homepage: https://docs.openalex.org/download-all-data/openalex-snapshot
     license: CC0
     notes: >
-      Full snapshot exceeds 660 GB. Registered at tier `massive` so no scheduled
-      run touches it; pull explicitly with `--tier massive` and a narrowed prefix.
+      Full Parquet snapshot. Registered at tier `massive` so no scheduled run touches it.
+      Backfill in resumable S3 key-range batches; routine runs remain unaffected.
     params:
       host: openalex.s3.amazonaws.com
-      prefix: "data/jsonl/institutions/"
-      max_keys: 200
-      max_total_bytes: 10737418240
+      prefix: "data/parquet/"
+      max_keys: 100000
+      max_total_bytes: 85899345920
       doctor_sample: 2
 
   - id: WIPO_STATISTICS
@@ -91,4 +91,3 @@ sources:
         url: https://ourworldindata.org/grapher/annual-patent-applications.csv?v=1&csvType=full
         filename: wipo_annual_patent_applications_owid.csv
         notes: OWID mirror of WIPO patent-application series via World Bank; used because the old WIPO bulk path now serves HTML.
-

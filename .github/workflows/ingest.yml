@@ -20,6 +20,22 @@ on:
         description: "Plan only, transfer nothing"
         type: boolean
         default: false
+      source:
+        description: "Optional explicit source id"
+        required: false
+        default: ""
+      s3_start_after:
+        description: "Optional S3 key to resume after"
+        required: false
+        default: ""
+      s3_max_total_bytes:
+        description: "Optional S3 batch byte ceiling"
+        required: false
+        default: ""
+      s3_max_keys:
+        description: "Optional S3 batch object ceiling"
+        required: false
+        default: ""
 
 concurrency:
   # Never let two ingest runs overlap; the second would fight the first for
@@ -102,6 +118,9 @@ jobs:
           GMSDL_MANIFEST_NAME: manifest_${{ matrix.domain }}.sqlite
           GMSDL_MAX_WORKDIR_BYTES: "8589934592"
           GMSDL_RUN_BUDGET_SECONDS: "18000"
+          GMSDL_S3_START_AFTER: ${{ inputs.s3_start_after || '' }}
+          GMSDL_S3_MAX_TOTAL_BYTES: ${{ inputs.s3_max_total_bytes || '' }}
+          GMSDL_S3_MAX_KEYS: ${{ inputs.s3_max_keys || '' }}
 
           # --- optional source credentials ---------------------------------
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
@@ -110,10 +129,14 @@ jobs:
           WTO_API_KEY: ${{ secrets.WTO_API_KEY }}
           ACLED_API_KEY: ${{ secrets.ACLED_API_KEY }}
         run: |
-          python -m gmsdl.cli run \
-            --domain "^${{ matrix.domain }}$" \
-            --tier "${{ inputs.tier || 'core' }}" \
-            ${{ inputs.dry_run == true && '--dry-run' || '' }}
+          ARGS=(--domain "^${{ matrix.domain }}$" --tier "${{ inputs.tier || 'core' }}")
+          if [ -n "${{ inputs.source }}" ]; then
+            ARGS+=(--source "${{ inputs.source }}")
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          python -m gmsdl.cli run "${ARGS[@]}"
 
       - name: Upload run artefacts
         if: always()

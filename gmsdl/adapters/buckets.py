@@ -10,6 +10,7 @@ they are pulled only by an explicit backfill.
 """
 from __future__ import annotations
 
+import os
 import xml.etree.ElementTree as ET
 
 from ..registry import Dataset, Source
@@ -18,7 +19,7 @@ from . import register
 S3_NS = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
 
 
-def list_bucket(session, host: str, prefix: str, timeout: int, max_keys: int = 5000):
+def list_bucket(session, host: str, prefix: str, timeout: int, max_keys: int = 5000, start_after: str = ""):
     """Yield (key, size) for a public bucket prefix."""
     token = None
     fetched = 0
@@ -26,6 +27,8 @@ def list_bucket(session, host: str, prefix: str, timeout: int, max_keys: int = 5
         params = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
         if token:
             params["continuation-token"] = token
+        elif start_after:
+            params["start-after"] = start_after
         r = session.get(f"https://{host}/", params=params, timeout=timeout)
         r.raise_for_status()
         root = ET.fromstring(r.content)
@@ -56,12 +59,13 @@ def s3_public(source: Source, session, settings) -> list[Dataset]:
     host = p.get("host", "openalex.s3.amazonaws.com")
     prefix = p.get("prefix", "")
     include = p.get("include_suffix")
-    max_keys = int(p.get("max_keys", 2000))
-    max_total = int(p.get("max_total_bytes", 20 * 1024**3))
+    max_keys = int(os.environ.get("GMSDL_S3_MAX_KEYS") or p.get("max_keys", 2000))
+    max_total = int(os.environ.get("GMSDL_S3_MAX_TOTAL_BYTES") or p.get("max_total_bytes", 20 * 1024**3))
+    start_after = os.environ.get("GMSDL_S3_START_AFTER", "").strip()
 
     out: list[Dataset] = []
     total = 0
-    for key, size in list_bucket(session, host, prefix, settings.http_timeout, max_keys):
+    for key, size in list_bucket(session, host, prefix, settings.http_timeout, max_keys, start_after):
         if include and not key.endswith(tuple(include if isinstance(include, list) else [include])):
             continue
         if total + size > max_total:

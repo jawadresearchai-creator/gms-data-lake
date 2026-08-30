@@ -1,0 +1,105 @@
+name: OpenAlex Full Snapshot
+
+# Explicit one-off full-snapshot backfill. This workflow is intentionally not
+# scheduled. Batches are deterministic S3 key ranges and run one at a time so
+# the shared Drive manifest is never updated concurrently.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: gmsdl-ingest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        include:
+          - batch: 1
+            start_after: ""
+          - batch: 2
+            start_after: "data/parquet/authors/updated_date=2023-02-15/part_0000.parquet"
+          - batch: 3
+            start_after: "data/parquet/authors/updated_date=2024-07-16/part_0000.parquet"
+          - batch: 4
+            start_after: "data/parquet/authors/updated_date=2025-10-10/part_0052.parquet"
+          - batch: 5
+            start_after: "data/parquet/awards/updated_date=2026-04-29/part_0000.parquet"
+          - batch: 6
+            start_after: "data/parquet/languages/updated_date=2026-06-16/part_0000.parquet"
+          - batch: 7
+            start_after: "data/parquet/works/updated_date=2025-09-26/part_0000.parquet"
+          - batch: 8
+            start_after: "data/parquet/works/updated_date=2025-11-06/part_0139.parquet"
+          - batch: 9
+            start_after: "data/parquet/works/updated_date=2025-11-06/part_0507.parquet"
+          - batch: 10
+            start_after: "data/parquet/works/updated_date=2025-11-06/part_0881.parquet"
+          - batch: 11
+            start_after: "data/parquet/works/updated_date=2026-01-13/part_0021.parquet"
+          - batch: 12
+            start_after: "data/parquet/works/updated_date=2026-02-20/part_0003.parquet"
+          - batch: 13
+            start_after: "data/parquet/works/updated_date=2026-05-21/part_0025.parquet"
+          - batch: 14
+            start_after: "data/parquet/works/updated_date=2026-05-29/part_0000.parquet"
+          - batch: 15
+            start_after: "data/parquet/works/updated_date=2026-06-26/part_0081.parquet"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Show disk headroom
+        run: df -h / | tail -1
+
+      - name: Backfill OpenAlex batch ${{ matrix.batch }}
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+
+          GMSDL_CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+          GMSDL_REMOTE_ROOT: ""
+          GMSDL_MANIFEST_NAME: manifest_04_INNOVATION_AND_TECHNOLOGY.sqlite
+          GMSDL_MAX_WORKDIR_BYTES: "8589934592"
+          GMSDL_RUN_BUDGET_SECONDS: "18000"
+          GMSDL_S3_START_AFTER: ${{ matrix.start_after }}
+          GMSDL_S3_MAX_TOTAL_BYTES: "85899345920"
+          GMSDL_S3_MAX_KEYS: "500"
+        run: |
+          python -m gmsdl.cli run \
+            --domain "^04_INNOVATION_AND_TECHNOLOGY$" \
+            --source OPENALEX_SNAPSHOT \
+            --tier massive \
+            --strict
+
+      - name: Upload run artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openalex-state-batch-${{ matrix.batch }}
+          path: _state/
+          retention-days: 30
+          if-no-files-found: ignore
