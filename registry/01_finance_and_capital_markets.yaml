@@ -1,0 +1,142 @@
+domain: "01_FINANCE_AND_CAPITAL_MARKETS"
+sources:
+  - id: SEC_BULK
+    name: SEC EDGAR bulk company facts and submissions
+    subdomain: filings
+    kind: static
+    cadence: weekly
+    tier: bulk                      # ~1.5 GB + ~1.3 GB; excluded from core runs
+    homepage: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+    license: US federal government work, public domain
+    rate_limit_per_sec: 8
+    headers:
+      Referer: https://www.sec.gov/
+    datasets:
+      - id: companyfacts
+        url: https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip
+        filename: companyfacts.zip
+        max_bytes: 6442450944
+        notes: All XBRL facts for all filers, recompiled nightly.
+      - id: submissions
+        url: https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip
+        filename: submissions.zip
+        max_bytes: 6442450944
+
+  - id: SEC_FINANCIAL_STATEMENT_SETS
+    name: SEC DERA financial statement data sets
+    subdomain: fundamentals
+    kind: adapter
+    adapter: static_expand
+    cadence: quarterly
+    tier: core
+    homepage: https://www.sec.gov/data-research/sec-markets-data/financial-statement-data-sets
+    license: US federal government work, public domain
+    rate_limit_per_sec: 8
+    headers:
+      Referer: https://www.sec.gov/
+    params:
+      url_template: "https://www.sec.gov/files/dera/data/financial-statement-data-sets/{code}.zip"
+      filename_template: "{code}.zip"
+      doctor_sample: 4
+      codes:
+        - 2024q1
+        - 2024q2
+        - 2024q3
+        - 2024q4
+        - 2025q1
+        - 2025q2
+        - 2025q3
+        - 2025q4
+        - 2026q1
+
+  - id: KENNETH_FRENCH_FACTORS
+    name: Kenneth French data library — asset pricing factors
+    subdomain: factors
+    kind: adapter
+    adapter: static_expand
+    cadence: monthly
+    tier: core
+    homepage: https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
+    license: Free for academic research; cite Fama & French
+    params:
+      url_template: "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/{code}_CSV.zip"
+      filename_template: "{code}_CSV.zip"
+      doctor_sample: 5
+      codes:
+        - code: F-F_Research_Data_Factors
+          name: Fama-French 3 factors, monthly and annual
+        - code: F-F_Research_Data_Factors_daily
+          name: Fama-French 3 factors, daily
+        - code: F-F_Research_Data_5_Factors_2x3
+          name: Fama-French 5 factors
+        - code: F-F_Research_Data_5_Factors_2x3_daily
+          name: Fama-French 5 factors, daily
+        - code: F-F_Momentum_Factor
+          name: Momentum factor
+        - code: F-F_Momentum_Factor_daily
+          name: Momentum factor, daily
+        - code: 49_Industry_Portfolios
+          name: 49 industry portfolios
+        - code: 48_Industry_Portfolios
+          name: 48 industry portfolios
+        - code: Portfolios_Formed_on_ME
+          name: Size-sorted portfolios
+        - code: Portfolios_Formed_on_BE-ME
+          name: Book-to-market sorted portfolios
+        - code: Developed_3_Factors
+          name: Developed markets 3 factors
+        - code: Emerging_5_Factors
+          name: Emerging markets 5 factors
+
+  - id: CBOE_VOLATILITY
+    name: Cboe volatility index history
+    subdomain: market_structure
+    kind: static
+    cadence: weekly
+    tier: core
+    homepage: https://www.cboe.com/tradable_products/vix/vix_historical_data/
+    license: Cboe public historical data
+    datasets:
+      - id: vix_history
+        url: https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv
+        filename: VIX_History.csv
+      - id: vix9d_history
+        url: https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX9D_History.csv
+        filename: VIX9D_History.csv
+      - id: vvix_history
+        url: https://cdn.cboe.com/api/global/us_indices/daily_prices/VVIX_History.csv
+        filename: VVIX_History.csv
+
+  - id: CFTC_COT
+    name: CFTC Commitments of Traders
+    subdomain: market_structure
+    kind: adapter
+    adapter: static_expand
+    cadence: weekly
+    tier: core
+    homepage: https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm
+    license: US federal government work, public domain
+    params:
+      url_template: "https://www.cftc.gov/files/dea/history/{code}.zip"
+      filename_template: "{code}.zip"
+      doctor_sample: 3
+      codes:
+        - fut_disagg_txt_2025
+        - fut_fin_txt_2025
+        - deacot2025
+
+  - id: FINRA_SHORT_SALE
+    name: FINRA consolidated short sale volume
+    subdomain: short_selling
+    kind: static
+    cadence: weekly
+    tier: extended
+    homepage: https://www.finra.org/finra-data/browse-catalog/short-sale-volume-data
+    license: FINRA public data
+    notes: >
+      Daily files use a date-stamped path. Registered here as a single probe;
+      widen with a static_expand adapter over trading days once verified.
+    datasets:
+      - id: short_sale_daily_index
+        url: https://cdn.finra.org/equity/regsho/daily/CNMSshvol20260828.txt
+        filename: CNMSshvol_sample.txt

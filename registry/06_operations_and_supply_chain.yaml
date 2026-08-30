@@ -1,0 +1,78 @@
+domain: "06_OPERATIONS_AND_SUPPLY_CHAIN"
+sources:
+  - id: FED_INDUSTRIAL_PRODUCTION
+    name: Federal Reserve G.17 industrial production and capacity utilisation
+    subdomain: industrial_production
+    kind: static
+    cadence: monthly
+    tier: core
+    homepage: https://www.federalreserve.gov/releases/g17/
+    license: US federal government work, public domain
+    datasets:
+      - id: g17_ip_current
+        url: https://www.federalreserve.gov/datadownload/Output.aspx?rel=G17&filetype=csv&label=include&layout=seriescolumn
+        filename: g17_industrial_production.csv
+
+  - id: NYFED_GSCPI
+    name: New York Fed Global Supply Chain Pressure Index
+    subdomain: supply_chain_pressure
+    kind: static
+    cadence: monthly
+    tier: core
+    homepage: https://www.newyorkfed.org/research/policy/gscpi
+    license: NY Fed public research data
+    datasets:
+      - id: gscpi
+        url: https://www.newyorkfed.org/medialibrary/research/interactives/gscpi/downloads/gscpi_data.xlsx
+        filename: gscpi_data.xlsx
+
+  - id: BTS_TRANSPORT
+    name: Bureau of Transportation Statistics freight and transport
+    subdomain: freight
+    kind: static
+    cadence: monthly
+    tier: core
+    homepage: https://www.bts.gov/
+    license: US federal government work, public domain
+    datasets:
+      - id: tsi_freight
+        url: https://www.bts.gov/sites/bts.dot.gov/files/docs/TSI.csv
+        filename: transportation_services_index.csv
+        notes: Endpoint unconfirmed; doctor will report if it has moved.
+
+  - id: OECD_ICIO
+    name: OECD inter-country input-output tables
+    subdomain: input_output_tables
+    kind: adapter
+    adapter: sdmx_oecd
+    cadence: annual
+    tier: extended
+    homepage: https://www.oecd.org/sti/ind/inter-country-input-output-tables.htm
+    license: OECD terms
+    params:
+      max_datasets: 8
+      doctor_sample: 2
+      include_regex: "(?i)(ICIO|TIVA|STAN)"
+
+  - id: FRED_INVENTORIES
+    name: Manufacturing and trade inventories via FRED series
+    subdomain: inventories
+    kind: adapter
+    adapter: static_expand
+    cadence: monthly
+    tier: core
+    homepage: https://fred.stlouisfed.org/
+    license: Free to use; FRED terms
+    params:
+      url_template: "https://fred.stlouisfed.org/graph/fredgraph.csv?id={code}"
+      filename_template: "fred_{code}.csv"
+      doctor_sample: 4
+      codes:
+        - ISRATIO
+        - BUSINV
+        - TOTBUSMPCIMSA
+        - RETAILIRSA
+        - MNFCTRIRSA
+        - INDPRO
+        - TCU
+        - AMTMNO

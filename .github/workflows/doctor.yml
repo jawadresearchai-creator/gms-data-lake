@@ -1,0 +1,47 @@
+name: Registry health
+
+# Seventy third-party download URLs is a living surface: hosts retire, paths
+# gain a year segment, agencies move to an API, clients get blocked. This job
+# tells you which entries rotted, before a scheduled ingest silently loses them.
+on:
+  schedule:
+    - cron: "0 5 * * 1"      # Mondays 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Probe every registry entry
+        env:
+          GMSDL_CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
+          COMTRADE_API_KEY: ${{ secrets.COMTRADE_API_KEY }}
+          WTO_API_KEY: ${{ secrets.WTO_API_KEY }}
+        # Threshold is deliberately loose: some hosts rate-limit a burst of
+        # HEADs. A sustained rise is the signal, not one red run.
+        run: |
+          python -m gmsdl.cli doctor \
+            --tier extended \
+            --workers 6 \
+            --max-failure-rate 0.40 \
+            --output registry_health.md
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: registry-health
+          path: registry_health.md
+          retention-days: 90

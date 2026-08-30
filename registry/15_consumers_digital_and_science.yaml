@@ -1,0 +1,87 @@
+domain: "15_CONSUMERS_DIGITAL_AND_SCIENCE"
+sources:
+  - id: CENSUS_RETAIL
+    name: Census advance monthly retail trade
+    subdomain: retail_sales
+    kind: static
+    cadence: monthly
+    tier: core
+    homepage: https://www.census.gov/retail/
+    license: US federal government work, public domain
+    datasets:
+      - id: marts_current
+        url: https://www.census.gov/retail/marts/www/adv44x72.txt
+        filename: advance_retail_sales.txt
+
+  - id: FRED_CONSUMER
+    name: Consumer prices, sentiment and household finance via FRED
+    subdomain: consumer_prices
+    kind: adapter
+    adapter: static_expand
+    cadence: monthly
+    tier: core
+    homepage: https://fred.stlouisfed.org/
+    license: Free to use; FRED terms
+    params:
+      url_template: "https://fred.stlouisfed.org/graph/fredgraph.csv?id={code}"
+      filename_template: "fred_{code}.csv"
+      doctor_sample: 5
+      codes:
+        - CPIAUCSL
+        - CPILFESL
+        - PCEPI
+        - UMCSENT
+        - PSAVERT
+        - TOTALSL
+        - DSPIC96
+        - RSAFS
+        - HOUST
+        - MORTGAGE30US
+        - DFF
+        - DGS10
+        - T10Y2Y
+        - UNRATE
+        - PAYEMS
+        - GDPC1
+        - M2SL
+        - VIXCLS
+
+  - id: OWID_DIGITAL
+    name: Our World in Data technology adoption series
+    subdomain: internet_usage
+    kind: adapter
+    adapter: static_expand
+    cadence: quarterly
+    tier: core
+    homepage: https://ourworldindata.org/technological-change
+    license: CC BY 4.0
+    notes: >
+      Replaces datahub.itu.int, which 403s scripted clients and serves a SPA.
+      OWID republishes the ITU series with provenance.
+    params:
+      url_template: "https://ourworldindata.org/grapher/{code}.csv?v=1&csvType=full"
+      filename_template: "owid_{code}.csv"
+      doctor_sample: 4
+      codes:
+        - share-of-individuals-using-the-internet
+        - mobile-cellular-subscriptions-per-100-people
+        - broadband-penetration-by-country
+        - number-of-internet-users
+        - annual-change-electricity-generation
+        - share-electricity-renewables
+
+  - id: WHO_GHO
+    name: WHO Global Health Observatory OData API
+    subdomain: public_health_indicators
+    kind: static
+    cadence: quarterly
+    tier: extended
+    homepage: https://www.who.int/data/gho/info/gho-odata-api
+    license: WHO terms — free with attribution
+    datasets:
+      - id: gho_indicators
+        url: https://ghoapi.azureedge.net/api/Indicator
+        filename: who_gho_indicators.json
+      - id: gho_dimensions
+        url: https://ghoapi.azureedge.net/api/Dimension
+        filename: who_gho_dimensions.json

@@ -1,0 +1,187 @@
+domain: "02_MACROECONOMICS_AND_MONETARY"
+sources:
+  - id: WORLD_BANK_BULK
+    name: World Bank flagship database bundles
+    subdomain: GDP
+    kind: static
+    cadence: quarterly
+    tier: core
+    homepage: https://datatopics.worldbank.org/world-development-indicators/
+    license: CC BY 4.0
+    datasets:
+      - id: WDI_CSV
+        url: https://databank.worldbank.org/data/download/WDI_CSV.zip
+        filename: WDI_CSV.zip
+        max_bytes: 1073741824
+        notes: World Development Indicators — the backbone country-year panel.
+      - id: IDS_CSV
+        url: https://databank.worldbank.org/data/download/IDS_CSV.zip
+        filename: IDS_CSV.zip
+      - id: GEM_CSV
+        url: https://databank.worldbank.org/data/download/GemDataEXTR.zip
+        filename: GemDataEXTR.zip
+      - id: commodity_prices_monthly
+        url: https://thedocs.worldbank.org/en/doc/18675f1d1639c7a34d463f59263ba0a2-0050012025/related/CMO-Historical-Data-Monthly.xlsx
+        filename: CMO-Historical-Data-Monthly.xlsx
+        notes: The Pink Sheet. Path embeds a build hash and rotates; doctor will catch it.
+
+  - id: WORLD_BANK_API
+    name: World Bank indicator API by database
+    subdomain: GDP
+    kind: adapter
+    adapter: worldbank_indicators
+    cadence: quarterly
+    tier: extended
+    homepage: https://datahelpdesk.worldbank.org/knowledgebase/topics/125589
+    license: CC BY 4.0
+    params:
+      max_datasets: 30
+      doctor_sample: 3
+      source_codes: [WDI, WGI, IDS, GEM, FDX, ESY, JOB, GEP, EDS, HNP]
+
+  - id: IMF_WEO
+    name: IMF World Economic Outlook database
+    subdomain: GDP
+    kind: static
+    cadence: quarterly
+    tier: core
+    homepage: https://data.imf.org/en/datasets/IMF.RES:WEO
+    license: IMF terms — free for research with attribution
+    notes: >
+      The old www.imf.org/-/media/files/publications/weo/weodatabase/ paths now
+      404. The current file lives on data.imf.org under a GUID directory.
+    datasets:
+      - id: WEO_current
+        url: https://data.imf.org/-/media/iData/External-Storage/Documents/2F78EE59F79143A7921E5E203D3AAA80/en/WEOApr2026all.xlsx
+        filename: WEOApr2026all.xlsx
+
+  - id: BIS_BULK
+    name: BIS bulk statistical datasets
+    subdomain: interest_rates
+    kind: adapter
+    adapter: static_expand
+    cadence: monthly
+    tier: core
+    homepage: https://data.bis.org/bulkdownload
+    license: BIS terms of use — free for non-commercial research
+    params:
+      url_template: "https://data.bis.org/static/bulk/{code}_csv_flat.zip"
+      filename_template: "{code}_csv_flat.zip"
+      doctor_sample: 6
+      codes:
+        - code: WS_CBPOL
+          name: Central bank policy rates
+        - code: WS_LONG_CPI
+          name: Long consumer price series
+        - code: WS_XRU
+          name: Bilateral exchange rates
+        - code: WS_EER
+          name: Effective exchange rates
+        - code: WS_TC
+          name: Credit to the non-financial sector
+        - code: WS_CREDIT_GAP
+          name: Credit-to-GDP gaps
+        - code: WS_DSR
+          name: Debt service ratios
+        - code: WS_SPP
+          name: Selected residential property prices
+        - code: WS_CPP
+          name: Commercial property prices
+        - code: WS_GLI
+          name: Global liquidity indicators
+        - code: WS_LBS_D_PUB
+          name: Locational banking statistics
+        - code: WS_CBS_PUB
+          name: Consolidated banking statistics
+        - code: WS_NA_SEC_DSS
+          name: Domestic debt securities
+        - code: WS_DEBT_SEC2_PUB
+          name: International debt securities
+        - code: WS_OTC_DERIV2
+          name: OTC derivatives
+        - code: WS_XTD_DERIV
+          name: Exchange-traded derivatives
+        - code: WS_CBTA
+          name: Central bank total assets
+
+  - id: OECD_SDMX
+    name: OECD SDMX dataflows
+    subdomain: GDP
+    kind: adapter
+    adapter: sdmx_oecd
+    cadence: quarterly
+    tier: extended
+    homepage: https://data-explorer.oecd.org/
+    license: OECD terms — free for non-commercial use
+    params:
+      max_datasets: 40
+      doctor_sample: 3
+      include_regex: "(?i)(QNA|MEI|KEI|PRICES|PDB|STAN|BLI|SNA_TABLE|ALFS|EO)"
+
+  - id: ECB_SDMX
+    name: ECB Data Portal dataflows
+    subdomain: monetary_policy
+    kind: adapter
+    adapter: sdmx_ecb
+    cadence: monthly
+    tier: extended
+    homepage: https://data.ecb.europa.eu/
+    license: ECB terms — free with attribution
+    params:
+      max_datasets: 25
+      doctor_sample: 3
+      include_regex: "^(EXR|ICP|BSI|MIR|FM|IRS|YC|RAI|STS|GST|BLS)$"
+
+  - id: EUROSTAT
+    name: Eurostat dissemination API
+    subdomain: inflation
+    kind: adapter
+    adapter: eurostat
+    cadence: monthly
+    tier: extended
+    homepage: https://ec.europa.eu/eurostat/data/database
+    license: Eurostat re-use policy — free with attribution
+    notes: >
+      Eurostat retired the bulk-download listing entirely. Discovery now goes
+      through the catalogue TOC endpoint, not the web tree.
+    params:
+      max_datasets: 60
+      doctor_sample: 3
+      include_regex: "^(prc_hicp|nama_10|namq_10|une_rt|lfsi_|ei_bssi|sts_|ert_bil|gov_10|bop_)"
+
+  - id: FRED_MD_QD
+    name: FRED-MD / FRED-QD macroeconomic databases
+    subdomain: GDP
+    kind: adapter
+    adapter: stlouisfed_fredmd
+    cadence: monthly
+    tier: core
+    homepage: https://www.stlouisfed.org/research/economists/mccracken/fred-databases
+    license: St. Louis Fed research data, free to use
+    notes: >
+      files.stlouisfed.org 403s scripted clients. The live files are on a
+      date-versioned media path; the adapter walks back from the current month.
+    params:
+      max_lookback_months: 5
+      doctor_sample: 2
+
+  - id: US_TREASURY_FISCAL
+    name: US Treasury Fiscal Data API
+    subdomain: debt
+    kind: adapter
+    adapter: treasury_fiscaldata
+    cadence: weekly
+    tier: core
+    homepage: https://fiscaldata.treasury.gov/
+    license: US federal government work, public domain
+    notes: >
+      Replaces the home.treasury.gov XML yield-curve endpoint, which 403s
+      non-browser clients.
+    params:
+      page_size: 10000
+      doctor_sample: 3
+      endpoints:
+        avg_interest_rates: v2/accounting/od/avg_interest_rates
+        debt_to_penny: v2/accounting/od/debt_to_penny
+        daily_treasury_yield: v1/accounting/od/avg_interest_rates
+        federal_debt: v2/accounting/od/debt_outstanding

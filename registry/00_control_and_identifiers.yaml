@@ -1,0 +1,81 @@
+# Universal identifiers. These are the join keys the whole lake hangs off:
+# CIK <-> ticker <-> LEI. Ingest these first; everything else references them.
+domain: "00_CONTROL_AND_CATALOG"
+sources:
+  - id: SEC_IDENTIFIERS
+    name: SEC EDGAR company identifier crosswalks
+    subdomain: company_master
+    kind: static
+    cadence: weekly
+    tier: core
+    homepage: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+    license: US federal government work, public domain
+    rate_limit_per_sec: 8            # SEC asks for <=10 req/s
+    headers:
+      # SEC policy requires a User-Agent that identifies a contact address.
+      # A bare python-requests UA is refused outright.
+      Referer: https://www.sec.gov/
+    datasets:
+      - id: company_tickers
+        url: https://www.sec.gov/files/company_tickers.json
+        filename: company_tickers.json
+      - id: company_tickers_exchange
+        url: https://www.sec.gov/files/company_tickers_exchange.json
+        filename: company_tickers_exchange.json
+
+  - id: NASDAQ_SYMBOL_DIRECTORY
+    name: Nasdaq Trader symbol directory
+    subdomain: security_master
+    kind: static
+    cadence: weekly
+    tier: core
+    homepage: https://www.nasdaqtrader.com/trader.aspx?id=symboldirdefs
+    license: Nasdaq public symbol directory
+    datasets:
+      - id: nasdaqlisted
+        url: https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt
+        filename: nasdaqlisted.txt
+      - id: otherlisted
+        url: https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt
+        filename: otherlisted.txt
+
+  - id: GLEIF_LEI
+    name: GLEIF Legal Entity Identifier golden copy
+    subdomain: organization_master
+    kind: static
+    cadence: weekly
+    tier: extended
+    homepage: https://www.gleif.org/en/lei-data/gleif-golden-copy/download-the-golden-copy
+    license: CC0
+    notes: >
+      GLEIF changed its download endpoints in 2025. The concatenated files below
+      are the documented stable aliases; `gmsdl doctor` will flag them if they
+      move again. The API alternative is
+      https://leidata.gleif.org/api/v2/golden-copies/publishes
+    datasets:
+      - id: lei2_golden_copy
+        url: https://leidata-preview.gleif.org/storage/golden-copy-files/latest/lei2-golden-copy.csv.zip
+        filename: lei2-golden-copy.csv.zip
+        max_bytes: 3221225472
+      - id: rr_golden_copy
+        url: https://leidata-preview.gleif.org/storage/golden-copy-files/latest/rr-golden-copy.csv.zip
+        filename: rr-golden-copy.csv.zip
+
+  - id: GEONAMES
+    name: GeoNames country and administrative geography
+    subdomain: geography_master
+    kind: static
+    cadence: quarterly
+    tier: core
+    homepage: https://download.geonames.org/export/dump/
+    license: CC BY 4.0
+    datasets:
+      - id: countryInfo
+        url: https://download.geonames.org/export/dump/countryInfo.txt
+        filename: countryInfo.txt
+      - id: admin1CodesASCII
+        url: https://download.geonames.org/export/dump/admin1CodesASCII.txt
+        filename: admin1CodesASCII.txt
+      - id: cities15000
+        url: https://download.geonames.org/export/dump/cities15000.zip
+        filename: cities15000.zip

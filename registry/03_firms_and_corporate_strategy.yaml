@@ -1,0 +1,68 @@
+domain: "03_FIRMS_AND_CORPORATE_STRATEGY"
+sources:
+  - id: CENSUS_BDS
+    name: Census Business Dynamics Statistics
+    subdomain: business_dynamics
+    kind: adapter
+    adapter: census_bds
+    cadence: annual
+    tier: core
+    homepage: https://www.census.gov/programs-surveys/bds.html
+    license: US federal government work, public domain
+    notes: >
+      Files live under a year-stamped directory. The previous engine requested
+      the parent path and got a 404 for every table.
+    params:
+      vintage: 2023
+      doctor_sample: 3
+      tables: ["", "_sec", "_st", "_msa", "_vcn4", "_fa", "_fage"]
+
+  - id: CENSUS_BFS
+    name: Census Business Formation Statistics
+    subdomain: firm_entry_exit
+    kind: static
+    cadence: monthly
+    tier: core
+    homepage: https://www.census.gov/econ/bfs/
+    license: US federal government work, public domain
+    datasets:
+      - id: bfs_monthly_state
+        url: https://www.census.gov/econ/bfs/csv/bfs_monthly.csv
+        filename: bfs_monthly.csv
+      - id: bfs_apps_naics
+        url: https://www.census.gov/econ/bfs/csv/date_table_for_working_paper.csv
+        filename: bfs_naics.csv
+
+  - id: CENSUS_CBP
+    name: County Business Patterns
+    subdomain: firm_demographics
+    kind: adapter
+    adapter: static_expand
+    cadence: annual
+    tier: extended
+    homepage: https://www.census.gov/programs-surveys/cbp.html
+    license: US federal government work, public domain
+    params:
+      url_template: "https://www2.census.gov/programs-surveys/cbp/datasets/{code}"
+      filename_template: "{code}"
+      doctor_sample: 3
+      codes:
+        - 2022/cbp22co.zip
+        - 2022/cbp22st.zip
+        - 2022/cbp22us.zip
+        - 2021/cbp21co.zip
+
+  - id: SEC_INDUSTRY_SIC
+    name: SEC SIC industry classification list
+    subdomain: industry_classifications
+    kind: static
+    cadence: annual
+    tier: core
+    homepage: https://www.sec.gov/corpfin/division-of-corporation-finance-standard-industrial-classification-sic-code-list
+    license: US federal government work, public domain
+    headers:
+      Referer: https://www.sec.gov/
+    datasets:
+      - id: naics_2022
+        url: https://www.census.gov/naics/2022NAICS/2-6%20digit_2022_Codes.xlsx
+        filename: naics_2022_codes.xlsx

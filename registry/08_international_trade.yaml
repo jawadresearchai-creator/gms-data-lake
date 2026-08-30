@@ -1,0 +1,72 @@
+domain: "08_INTERNATIONAL_TRADE"
+sources:
+  - id: UN_COMTRADE
+    name: UN Comtrade international merchandise trade
+    subdomain: imports_exports
+    kind: static
+    cadence: quarterly
+    tier: extended
+    homepage: https://comtradeplus.un.org/
+    license: UN Comtrade terms — free tier with registration
+    requires_secret: COMTRADE_API_KEY
+    headers:
+      Ocp-Apim-Subscription-Key: $COMTRADE_API_KEY
+    notes: >
+      comtradeplus.un.org is a single-page app with no crawlable links; the
+      previous engine found nothing there. This uses the documented REST API.
+    datasets:
+      - id: comtrade_annual_sample
+        url: https://comtradeapi.un.org/data/v1/get/C/A/HS?reporterCode=842&period=2023&flowCode=X
+        filename: comtrade_us_exports_2023.json
+
+  - id: WTO_TIMESERIES
+    name: WTO tariff and trade statistics
+    subdomain: tariffs
+    kind: static
+    cadence: annual
+    tier: extended
+    homepage: https://apiportal.wto.org/
+    license: WTO terms — free with registration
+    requires_secret: WTO_API_KEY
+    headers:
+      Ocp-Apim-Subscription-Key: $WTO_API_KEY
+    datasets:
+      - id: wto_indicators
+        url: https://api.wto.org/timeseries/v1/indicators?i=all&lang=1
+        filename: wto_indicators.json
+
+  - id: WORLD_BANK_WITS
+    name: World Bank WITS trade and tariff summaries
+    subdomain: trade_partners
+    kind: adapter
+    adapter: static_expand
+    cadence: annual
+    tier: core
+    homepage: https://wits.worldbank.org/
+    license: CC BY 4.0
+    params:
+      url_template: "https://wits.worldbank.org/data/public/{code}"
+      filename_template: "{code}"
+      doctor_sample: 2
+      codes:
+        - CountryProfile/en/country/ALL/year/2022/tradeflow/EXPIMP/partner/WLD/product/all
+        - Concordance/HS_to_ISIC.zip
+
+  - id: OWID_TRADE
+    name: Our World in Data trade and globalisation series
+    subdomain: global_value_chains
+    kind: adapter
+    adapter: static_expand
+    cadence: quarterly
+    tier: core
+    homepage: https://ourworldindata.org/trade-and-globalization
+    license: CC BY 4.0
+    params:
+      url_template: "https://ourworldindata.org/grapher/{code}.csv?v=1&csvType=full"
+      filename_template: "owid_{code}.csv"
+      doctor_sample: 3
+      codes:
+        - trade-as-share-of-gdp
+        - merchandise-exports-gdpcp
+        - foreign-direct-investment-net-inflows-of-gdp
+        - share-of-world-merchandise-exports

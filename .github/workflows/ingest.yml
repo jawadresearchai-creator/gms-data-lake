@@ -1,0 +1,125 @@
+name: Ingest
+
+# The whole point of this file: the lake refreshes itself on a schedule with
+# your laptop closed. Nothing here needs a human.
+on:
+  schedule:
+    # 02:00 UTC every Sunday (07:00 Asia/Karachi Sunday morning).
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Domain regex to run (blank = all)"
+        required: false
+        default: ""
+      tier:
+        description: "Max tier: core | extended | bulk | massive"
+        required: false
+        default: "core"
+      dry_run:
+        description: "Plan only, transfer nothing"
+        type: boolean
+        default: false
+
+concurrency:
+  # Never let two ingest runs overlap; the second would fight the first for
+  # the same manifests.
+  group: gmsdl-ingest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Fan out one job per domain. Each gets a clean 14 GB runner, its own
+  # manifest, and its own 6-hour budget. A domain that fails does not stop
+  # the others -- that is what fail-fast: false buys.
+  # ---------------------------------------------------------------------
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      domains: ${{ steps.list.outputs.domains }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - id: list
+        run: |
+          if [ -n "${{ inputs.domain }}" ]; then
+            D=$(python -m gmsdl.cli domains --json --domain "${{ inputs.domain }}")
+          else
+            D=$(python -m gmsdl.cli domains --json)
+          fi
+          echo "domains=$D" >> "$GITHUB_OUTPUT"
+          echo "Selected: $D"
+
+  ingest:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 4          # be a polite citizen to the source hosts
+      matrix:
+        domain: ${{ fromJson(needs.plan.outputs.domains) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Show disk headroom
+        run: df -h / | tail -1
+
+      - name: Run ingestion
+        env:
+          # --- Google Drive, via your own OAuth token (see SETUP.md) --------
+          # A service account will NOT work: it has no Drive storage quota of
+          # its own and every upload fails with storageQuotaExceeded.
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+
+          # --- engine ------------------------------------------------------
+          GMSDL_CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+          GMSDL_REMOTE_ROOT: ""     # root_folder_id already points at the lake
+          GMSDL_MANIFEST_NAME: manifest_${{ matrix.domain }}.sqlite
+          GMSDL_MAX_WORKDIR_BYTES: "8589934592"
+          GMSDL_RUN_BUDGET_SECONDS: "18000"
+
+          # --- optional source credentials ---------------------------------
+          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
+          COMTRADE_API_KEY: ${{ secrets.COMTRADE_API_KEY }}
+          WTO_API_KEY: ${{ secrets.WTO_API_KEY }}
+          ACLED_API_KEY: ${{ secrets.ACLED_API_KEY }}
+        run: |
+          python -m gmsdl.cli run \
+            --domain "^${{ matrix.domain }}$" \
+            --tier "${{ inputs.tier || 'core' }}" \
+            ${{ inputs.dry_run == true && '--dry-run' || '' }}
+
+      - name: Upload run artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-${{ matrix.domain }}
+          path: _state/
+          retention-days: 30
+          if-no-files-found: ignore

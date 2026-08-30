@@ -1,0 +1,97 @@
+domain: "13_ESG_ENVIRONMENT_ENERGY_AND_CLIMATE"
+sources:
+  - id: OWID_CO2
+    name: Our World in Data CO2 and greenhouse gas dataset
+    subdomain: emissions
+    kind: static
+    cadence: quarterly
+    tier: core
+    homepage: https://github.com/owid/co2-data
+    license: CC BY 4.0
+    datasets:
+      - id: owid_co2
+        url: https://nyc3.digitaloceanspaces.com/owid-public/data/co2/owid-co2-data.csv
+        filename: owid-co2-data.csv
+      - id: owid_energy
+        url: https://nyc3.digitaloceanspaces.com/owid-public/data/energy/owid-energy-data.csv
+        filename: owid-energy-data.csv
+
+  - id: EIA_BULK
+    name: US Energy Information Administration bulk manifest
+    subdomain: electricity
+    kind: static
+    cadence: monthly
+    tier: core
+    homepage: https://www.eia.gov/opendata/bulkfiles.php
+    license: US federal government work, public domain
+    requires_secret: EIA_API_KEY
+    datasets:
+      - id: bulk_manifest
+        url: https://api.eia.gov/bulk/manifest.txt
+        filename: eia_bulk_manifest.txt
+      - id: electricity_bulk
+        url: https://api.eia.gov/bulk/ELEC.zip
+        filename: eia_electricity.zip
+        max_bytes: 2147483648
+      - id: total_energy_bulk
+        url: https://api.eia.gov/bulk/TOTAL.zip
+        filename: eia_total_energy.zip
+
+  - id: EPA_GHG
+    name: EPA greenhouse gas reporting programme
+    subdomain: pollution
+    kind: static
+    cadence: annual
+    tier: extended
+    homepage: https://www.epa.gov/ghgreporting/data-sets
+    license: US federal government work, public domain
+    datasets:
+      - id: ghgrp_emissions
+        url: https://www.epa.gov/system/files/other-files/2024-10/2023_data_summary_spreadsheets.zip
+        filename: epa_ghgrp_summary.zip
+        notes: Path embeds a release date; doctor will report when it rotates.
+
+  - id: NOAA_CLIMATE_INDICES
+    name: NOAA climate indices
+    subdomain: climate
+    kind: adapter
+    adapter: static_expand
+    cadence: monthly
+    tier: core
+    homepage: https://psl.noaa.gov/data/climateindices/list/
+    license: US federal government work, public domain
+    notes: >
+      origin.cpc.ncep.noaa.gov (used previously) is not publicly routable.
+      psl.noaa.gov serves the same indices over plain HTTPS.
+    params:
+      url_template: "https://psl.noaa.gov/data/correlation/{code}.data"
+      filename_template: "noaa_{code}.txt"
+      doctor_sample: 3
+      codes: [oni, nina34, pdo, amon.us, soi, ao, nao]
+
+  - id: IRENA_CAPACITY
+    name: IRENA renewable capacity statistics
+    subdomain: renewable_energy
+    kind: static
+    cadence: annual
+    tier: extended
+    homepage: https://www.irena.org/Data/Downloads/IRENASTAT
+    license: IRENA terms — free for research
+    datasets:
+      - id: irena_capacity
+        url: https://www.irena.org/-/media/Files/IRENA/Agency/Publication/2024/Jul/IRENA_Stats_Extract_2024.xlsx
+        filename: irena_capacity.xlsx
+        notes: Release-dated path; verify with doctor before scheduling.
+
+  - id: EMDAT_DISASTERS
+    name: Disaster and hazard event context
+    subdomain: disasters
+    kind: static
+    cadence: quarterly
+    tier: core
+    homepage: https://www.emdat.be/
+    license: EM-DAT requires registration; OWID mirror is CC BY
+    datasets:
+      - id: owid_disasters
+        url: https://ourworldindata.org/grapher/number-of-natural-disaster-events.csv?v=1&csvType=full
+        filename: owid_natural_disasters.csv

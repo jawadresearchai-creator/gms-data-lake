@@ -1,0 +1,16 @@
+[project]
+name = "gmsdl"
+version = "2.0.0"
+description = "Global Multidisciplinary Management Science Data Lake — ingestion engine"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.31,<3", "PyYAML>=6.0,<7"]
+
+[project.scripts]
+gmsdl = "gmsdl.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["gmsdl*"]

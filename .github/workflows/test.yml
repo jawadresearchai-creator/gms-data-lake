@@ -1,0 +1,22 @@
+name: Tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Registry parses and every adapter resolves
+        run: python -m gmsdl.cli plan
+      - name: Offline engine tests
+        run: python tests/test_engine.py
+      - name: Transport and doctor tests
+        run: python tests/test_transport_and_doctor.py

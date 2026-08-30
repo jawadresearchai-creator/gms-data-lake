@@ -1,0 +1,93 @@
+domain: "04_INNOVATION_AND_TECHNOLOGY"
+sources:
+  - id: USPTO_ODP
+    name: USPTO Open Data Portal bulk products
+    subdomain: patents
+    kind: static
+    cadence: monthly
+    tier: extended
+    homepage: https://data.uspto.gov/bulkdata
+    license: US federal government work, public domain
+    notes: >
+      bulkdata.uspto.gov was retired and the old PatentsView download pages now
+      redirect to data.uspto.gov. Endpoints below are the current portal's;
+      verify with `gmsdl doctor` before relying on a full backfill.
+    datasets:
+      - id: patent_grant_index
+        url: https://bulkdata.uspto.gov/data/patent/grant/redbook/fulltext/2025/
+        filename: patent_grant_index.html
+        params: {expect_html: true}
+        notes: Index page only — used to detect whether the legacy host still resolves.
+
+  - id: PATENTSVIEW
+    name: PatentsView research-ready patent tables
+    subdomain: patents
+    kind: adapter
+    adapter: static_expand
+    cadence: quarterly
+    tier: bulk
+    homepage: https://patentsview.org/
+    license: CC BY 4.0
+    notes: Large tables; kept at tier `bulk` so routine runs skip them.
+    params:
+      url_template: "https://s3.amazonaws.com/data.patentsview.org/download/{code}.tsv.zip"
+      filename_template: "{code}.tsv.zip"
+      doctor_sample: 4
+      codes:
+        - g_patent
+        - g_assignee_disambiguated
+        - g_inventor_disambiguated
+        - g_cpc_current
+        - g_us_patent_citation
+        - g_location_disambiguated
+        - g_application
+
+  - id: CROSSREF
+    name: Crossref works metadata
+    subdomain: scientific_publications
+    kind: static
+    cadence: monthly
+    tier: core
+    homepage: https://api.crossref.org/
+    license: CC0
+    rate_limit_per_sec: 5
+    datasets:
+      - id: crossref_members
+        url: https://api.crossref.org/members?rows=1000
+        filename: crossref_members.json
+      - id: crossref_journals
+        url: https://api.crossref.org/journals?rows=1000
+        filename: crossref_journals.json
+
+  - id: OPENALEX_SNAPSHOT
+    name: OpenAlex scholarly graph snapshot
+    subdomain: scientific_publications
+    kind: adapter
+    adapter: s3_public
+    cadence: quarterly
+    tier: massive
+    homepage: https://docs.openalex.org/download-all-data/openalex-snapshot
+    license: CC0
+    notes: >
+      Full snapshot exceeds 660 GB. Registered at tier `massive` so no scheduled
+      run touches it; pull explicitly with `--tier massive` and a narrowed prefix.
+    params:
+      host: openalex.s3.amazonaws.com
+      prefix: "data/institutions/"
+      max_keys: 200
+      max_total_bytes: 10737418240
+      doctor_sample: 2
+
+  - id: WIPO_STATISTICS
+    name: WIPO IP statistics data centre
+    subdomain: innovation_indicators
+    kind: static
+    cadence: annual
+    tier: extended
+    homepage: https://www.wipo.int/ipstats/
+    license: WIPO terms — free for research
+    datasets:
+      - id: wipo_ip_statistics
+        url: https://www3.wipo.int/ipstats/bulk/IPStats_bulk.zip
+        filename: wipo_ip_statistics.zip
+        notes: Endpoint unconfirmed; doctor will report if the path has moved.

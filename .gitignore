@@ -1,0 +1,10 @@
+_work/
+_state/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.part
+__pycache__/
+*.pyc
+.venv/
+registry_health.md

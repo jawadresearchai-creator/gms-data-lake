@@ -1,0 +1,67 @@
+domain: "05_LABOR_AND_HUMAN_CAPITAL"
+sources:
+  - id: BLS_TIMESERIES
+    name: BLS bulk time series
+    subdomain: employment
+    kind: adapter
+    adapter: static_expand
+    cadence: monthly
+    tier: core
+    homepage: https://download.bls.gov/pub/time.series/
+    license: US federal government work, public domain
+    rate_limit_per_sec: 2
+    notes: >
+      download.bls.gov blocks clients without a contact-bearing User-Agent and a
+      browser-plausible Accept header. The engine sends both.
+    headers:
+      Referer: https://download.bls.gov/
+    params:
+      url_template: "https://download.bls.gov/pub/time.series/{code}"
+      filename_template: "{code}"
+      doctor_sample: 5
+      codes:
+        - ce/ce.data.0.AllCESSeries
+        - ce/ce.series
+        - ce/ce.industry
+        - ln/ln.data.1.AllData
+        - ln/ln.series
+        - jt/jt.data.1.AllItems
+        - jt/jt.series
+        - oe/oe.series
+        - pr/pr.data.0.Current
+        - cu/cu.data.0.Current
+        - wp/wp.data.0.Current
+
+  - id: ILOSTAT_BULK
+    name: ILOSTAT bulk indicator files
+    subdomain: employment
+    kind: adapter
+    adapter: static_expand
+    cadence: quarterly
+    tier: core
+    homepage: https://ilostat.ilo.org/data/bulk/
+    license: ILO terms — free with attribution
+    params:
+      url_template: "https://rplumber.ilo.org/data/indicator/?id={code}&format=.csv"
+      filename_template: "ilostat_{code}.csv"
+      doctor_sample: 3
+      codes:
+        - EMP_TEMP_SEX_AGE_NB_A
+        - UNE_TUNE_SEX_AGE_NB_A
+        - EAR_4MTH_SEX_ECO_CUR_NB_Q
+        - GDP_205U_NOC_NB_A
+        - SDG_0922_NOC_RT_A
+
+  - id: OECD_EDUCATION
+    name: OECD education and skills indicators
+    subdomain: education
+    kind: adapter
+    adapter: sdmx_oecd
+    cadence: annual
+    tier: extended
+    homepage: https://data-explorer.oecd.org/
+    license: OECD terms
+    params:
+      max_datasets: 12
+      doctor_sample: 2
+      include_regex: "(?i)(EDU|EAG|PISA|SKILL)"

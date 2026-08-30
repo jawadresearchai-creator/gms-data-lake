@@ -1,0 +1,56 @@
+domain: "21_NEWS_EVENTS_AND_SHOCKS"
+sources:
+  - id: GDELT_RECENT
+    name: GDELT 2.0 event and knowledge-graph files, trailing window
+    subdomain: GDELT
+    kind: adapter
+    adapter: gdelt_window
+    cadence: daily
+    tier: extended
+    homepage: https://www.gdeltproject.org/data.html
+    license: GDELT terms — free for research
+    notes: >
+      GDELT publishes a file every 15 minutes; the full archive is measured in
+      terabytes. The previous config set ENABLE_GDELT_ALL_STREAMS=True, which
+      would have attempted the entire history. This takes a bounded trailing
+      window and caps the file count per run.
+    params:
+      lookback_days: 3
+      streams: [export]
+      max_files: 120
+      doctor_sample: 2
+
+  - id: POLICY_UNCERTAINTY
+    name: Economic Policy Uncertainty indices
+    subdomain: policy_announcements
+    kind: adapter
+    adapter: static_expand
+    cadence: monthly
+    tier: core
+    homepage: https://www.policyuncertainty.com/
+    license: Free for research; cite Baker, Bloom & Davis
+    params:
+      url_template: "https://www.policyuncertainty.com/media/{code}"
+      filename_template: "{code}"
+      doctor_sample: 3
+      codes:
+        - US_Policy_Uncertainty_Data.xlsx
+        - Global_Policy_Uncertainty_Data.xlsx
+        - All_Country_Data.xlsx
+        - Categorical_EPU_Data.xlsx
+
+  - id: ACLED_CONFLICT
+    name: Armed conflict location and event context
+    subdomain: geopolitical_events
+    kind: static
+    cadence: monthly
+    tier: extended
+    homepage: https://acleddata.com/
+    license: ACLED terms — registration required for the full API
+    requires_secret: ACLED_API_KEY
+    enabled: false
+    notes: Disabled until an ACLED key is present; the engine skips it silently.
+    datasets:
+      - id: acled_events
+        url: https://api.acleddata.com/acled/read?terms=accept&limit=10000
+        filename: acled_events.json

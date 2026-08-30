@@ -1,0 +1,55 @@
+domain: "09_BANKING_AND_FINANCIAL_INSTITUTIONS"
+sources:
+  - id: FDIC_BANKFIND
+    name: FDIC BankFind Suite API
+    subdomain: bank_balance_sheets
+    kind: adapter
+    adapter: fdic_api
+    cadence: quarterly
+    tier: core
+    homepage: https://banks.data.fdic.gov/docs/
+    license: US federal government work, public domain
+    notes: >
+      The previous engine crawled the BankFind web page and stored the returned
+      HTML as data (FAILED_HTML_RESPONSE). The API serves CSV directly.
+    params:
+      page_size: 10000
+      doctor_sample: 4
+      endpoints:
+        institutions: institutions
+        failures: failures
+        locations: locations
+        sod: sod
+        financials: financials
+
+  - id: CFPB_COMPLAINTS
+    name: CFPB consumer complaint database
+    subdomain: lending
+    kind: static
+    cadence: monthly
+    tier: extended
+    homepage: https://www.consumerfinance.gov/data-research/consumer-complaints/
+    license: US federal government work, public domain
+    datasets:
+      - id: complaints_csv
+        url: https://files.consumerfinance.gov/ccdb/complaints.csv.zip
+        filename: cfpb_complaints.csv.zip
+        max_bytes: 3221225472
+
+  - id: FFIEC_CALL_REPORTS
+    name: FFIEC bank call reports
+    subdomain: call_reports
+    kind: static
+    cadence: quarterly
+    tier: extended
+    homepage: https://cdr.ffiec.gov/public/pws/downloadbulkdata.aspx
+    license: US federal government work, public domain
+    notes: >
+      The FFIEC bulk portal is an ASP.NET form requiring a POST with viewstate;
+      it cannot be fetched with a plain GET. Left disabled until a POST-capable
+      adapter exists. FDIC financials above cover most of the same ground.
+    enabled: false
+    datasets:
+      - id: call_reports_placeholder
+        url: https://cdr.ffiec.gov/public/pws/downloadbulkdata.aspx
+        filename: ffiec_placeholder.html
