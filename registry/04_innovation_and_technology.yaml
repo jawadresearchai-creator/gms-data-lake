@@ -1,4 +1,4 @@
-domain: "04_INNOVATION_AND_TECHNOLOGY"
+﻿domain: "04_INNOVATION_AND_TECHNOLOGY"
 sources:
   - id: USPTO_ODP
     name: USPTO Open Data Portal bulk products
@@ -17,7 +17,7 @@ sources:
         url: https://bulkdata.uspto.gov/data/patent/grant/redbook/fulltext/2025/
         filename: patent_grant_index.html
         params: {expect_html: true}
-        notes: Index page only — used to detect whether the legacy host still resolves.
+        notes: Index page only â€” used to detect whether the legacy host still resolves.
 
   - id: PATENTSVIEW
     name: PatentsView research-ready patent tables
@@ -73,7 +73,7 @@ sources:
       run touches it; pull explicitly with `--tier massive` and a narrowed prefix.
     params:
       host: openalex.s3.amazonaws.com
-      prefix: "data/institutions/"
+      prefix: "data/jsonl/institutions/"
       max_keys: 200
       max_total_bytes: 10737418240
       doctor_sample: 2
@@ -85,9 +85,10 @@ sources:
     cadence: annual
     tier: extended
     homepage: https://www.wipo.int/ipstats/
-    license: WIPO terms — free for research
+    license: WIPO terms â€” free for research
     datasets:
       - id: wipo_ip_statistics
         url: https://ourworldindata.org/grapher/annual-patent-applications.csv?v=1&csvType=full
         filename: wipo_annual_patent_applications_owid.csv
         notes: OWID mirror of WIPO patent-application series via World Bank; used because the old WIPO bulk path now serves HTML.
+
