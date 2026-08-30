@@ -1,0 +1,123 @@
+name: OpenAlex Watchdog
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_run:
+    workflows: ["OpenAlex Full Snapshot"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect latest OpenAlex backfill and recover if safe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Newest run of the full snapshot workflow.
+          RUN_JSON=$(gh api "/repos/$REPO/actions/workflows/openalex-full.yml/runs?per_page=20")
+          RUN_ID=$(jq -r '.workflow_runs[0].id // empty' <<<"$RUN_JSON")
+          STATUS=$(jq -r '.workflow_runs[0].status // empty' <<<"$RUN_JSON")
+          CONCLUSION=$(jq -r '.workflow_runs[0].conclusion // empty' <<<"$RUN_JSON")
+          UPDATED=$(jq -r '.workflow_runs[0].updated_at // empty' <<<"$RUN_JSON")
+
+          if [[ -z "$RUN_ID" ]]; then
+            echo "No OpenAlex full-snapshot run exists yet; nothing to do."
+            exit 0
+          fi
+
+          echo "Latest OpenAlex run: id=$RUN_ID status=$STATUS conclusion=$CONCLUSION updated=$UPDATED"
+
+          # A healthy run already owns the ingest concurrency group.
+          if [[ "$STATUS" == "queued" || "$STATUS" == "in_progress" || "$STATUS" == "waiting" || "$STATUS" == "pending" ]]; then
+            echo "Backfill is active; watchdog is idle."
+            exit 0
+          fi
+
+          if [[ "$CONCLUSION" == "success" ]]; then
+            echo "Full OpenAlex snapshot completed successfully."
+            exit 0
+          fi
+
+          # Find the first genuinely failed/timed-out batch. Cancelled jobs are
+          # usually downstream matrix jobs cancelled by fail-fast and are not
+          # the resume point.
+          JOBS=$(gh api --paginate "/repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100")
+          FAILED_NAME=$(jq -r '[.jobs[] | select(.conclusion=="failure" or .conclusion=="timed_out")][0].name // empty' <<<"$JOBS")
+          if [[ -z "$FAILED_NAME" ]]; then
+            echo "No failed batch job found; not guessing a resume point."
+            exit 0
+          fi
+
+          BATCH=$(sed -nE 's/.*backfill \(([0-9]+).*/\1/p' <<<"$FAILED_NAME")
+          if [[ -z "$BATCH" ]]; then
+            echo "Could not parse batch number from: $FAILED_NAME"
+            exit 1
+          fi
+          echo "Failure resume point: batch $BATCH ($FAILED_NAME)"
+
+          # Pull failed job logs to distinguish Drive quota from transient
+          # network/runner failures. Log retrieval may fail for infrastructure
+          # failures, so default to non-quota rather than aborting the watchdog.
+          JOB_ID=$(jq -r --arg n "$FAILED_NAME" '.jobs[] | select(.name==$n) | .id' <<<"$JOBS" | head -1)
+          LOG=$(mktemp)
+          gh api "/repos/$REPO/actions/jobs/$JOB_ID/logs" >"$LOG" 2>/dev/null || true
+          QUOTA=0
+          if grep -Eqi 'storageQuotaExceeded|750.?GB|upload quota|daily.*quota|quota.*exceeded|userRateLimitExceeded' "$LOG"; then
+            QUOTA=1
+          fi
+
+          # Compute age of the failed run. Quota failures wait 25 hours so the
+          # rolling Drive upload window has room again. Other failures get a
+          # 30-minute cooling period.
+          NOW=$(date -u +%s)
+          THEN=$(date -u -d "$UPDATED" +%s)
+          AGE=$((NOW-THEN))
+          if [[ "$QUOTA" -eq 1 ]]; then
+            MIN_AGE=$((25*3600))
+            echo "Drive quota signature detected."
+          else
+            MIN_AGE=$((30*60))
+          fi
+          if (( AGE < MIN_AGE )); then
+            echo "Cooling down: age=${AGE}s required=${MIN_AGE}s."
+            exit 0
+          fi
+
+          # Stop retry loops: at most 3 failed full-snapshot runs in the last
+          # six hours that failed on the same batch. Quota failures are exempt
+          # because their 25-hour delay already prevents hammering.
+          if [[ "$QUOTA" -eq 0 ]]; then
+            SIX_HOURS_AGO=$((NOW-6*3600))
+            SAME_BATCH_FAILURES=0
+            while read -r RID RSTATUS RCONC RUPDATED; do
+              [[ "$RSTATUS" == "completed" && ("$RCONC" == "failure" || "$RCONC" == "timed_out") ]] || continue
+              TS=$(date -u -d "$RUPDATED" +%s)
+              (( TS >= SIX_HOURS_AGO )) || continue
+              RJOBS=$(gh api "/repos/$REPO/actions/runs/$RID/jobs?per_page=100" 2>/dev/null || echo '{"jobs":[]}')
+              RNAME=$(jq -r '[.jobs[] | select(.conclusion=="failure" or .conclusion=="timed_out")][0].name // empty' <<<"$RJOBS")
+              RBATCH=$(sed -nE 's/.*backfill \(([0-9]+).*/\1/p' <<<"$RNAME")
+              [[ "$RBATCH" == "$BATCH" ]] && SAME_BATCH_FAILURES=$((SAME_BATCH_FAILURES+1))
+            done < <(jq -r '.workflow_runs[] | [.id,.status,(.conclusion//""),.updated_at] | @tsv' <<<"$RUN_JSON")
+
+            if (( SAME_BATCH_FAILURES >= 3 )); then
+              echo "Batch $BATCH has failed $SAME_BATCH_FAILURES times in 6 hours; stopping automatic retries."
+              exit 0
+            fi
+          fi
+
+          # Resume from the failed batch. The OpenAlex workflow skips all
+          # earlier matrix entries, preserving already uploaded data and the
+          # shared manifest.
+          echo "Dispatching OpenAlex Full Snapshot from batch $BATCH"
+          gh workflow run openalex-full.yml --repo "$REPO" -f start_batch="$BATCH"

@@ -5,6 +5,11 @@ name: OpenAlex Full Snapshot
 # the shared Drive manifest is never updated concurrently.
 on:
   workflow_dispatch:
+    inputs:
+      start_batch:
+        description: "Resume from this batch number (1-15)"
+        required: false
+        default: "1"
 
 concurrency:
   group: gmsdl-ingest
@@ -55,23 +60,29 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        if: ${{ matrix.batch >= fromJSON(inputs.start_batch || '1') }}
 
       - uses: actions/setup-python@v5
+        if: ${{ matrix.batch >= fromJSON(inputs.start_batch || '1') }}
         with:
           python-version: "3.11"
           cache: pip
 
       - run: pip install -r requirements.txt
+        if: ${{ matrix.batch >= fromJSON(inputs.start_batch || '1') }}
 
       - name: Install rclone
+        if: ${{ matrix.batch >= fromJSON(inputs.start_batch || '1') }}
         run: |
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
 
       - name: Show disk headroom
+        if: ${{ matrix.batch >= fromJSON(inputs.start_batch || '1') }}
         run: df -h / | tail -1
 
       - name: Backfill OpenAlex batch ${{ matrix.batch }}
+        if: ${{ matrix.batch >= fromJSON(inputs.start_batch || '1') }}
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -96,7 +107,7 @@ jobs:
             --strict
 
       - name: Upload run artefacts
-        if: always()
+        if: ${{ always() && matrix.batch >= fromJSON(inputs.start_batch || '1') }}
         uses: actions/upload-artifact@v4
         with:
           name: openalex-state-batch-${{ matrix.batch }}
