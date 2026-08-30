@@ -1,0 +1,103 @@
+name: OpenAlex Research Curation
+
+# Build the first research/query layer only after the full raw snapshot has
+# completed successfully. Every job handles a deterministic key range and every
+# object is copied from Drive -> ephemeral runner -> curated Drive, one at a time.
+on:
+  workflow_run:
+    workflows: ["OpenAlex Full Snapshot"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      start_batch:
+        description: "Resume from this batch number (1-15)"
+        required: false
+        default: "1"
+
+concurrency:
+  group: gmsdl-openalex-curation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  curate:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - batch: 1
+            start_after: ""
+          - batch: 2
+            start_after: "data/parquet/authors/updated_date=2023-02-15/part_0000.parquet"
+          - batch: 3
+            start_after: "data/parquet/authors/updated_date=2024-07-16/part_0000.parquet"
+          - batch: 4
+            start_after: "data/parquet/authors/updated_date=2025-10-10/part_0052.parquet"
+          - batch: 5
+            start_after: "data/parquet/awards/updated_date=2026-04-29/part_0000.parquet"
+          - batch: 6
+            start_after: "data/parquet/languages/updated_date=2026-06-16/part_0000.parquet"
+          - batch: 7
+            start_after: "data/parquet/works/updated_date=2025-09-26/part_0000.parquet"
+          - batch: 8
+            start_after: "data/parquet/works/updated_date=2025-11-06/part_0139.parquet"
+          - batch: 9
+            start_after: "data/parquet/works/updated_date=2025-11-06/part_0507.parquet"
+          - batch: 10
+            start_after: "data/parquet/works/updated_date=2025-11-06/part_0881.parquet"
+          - batch: 11
+            start_after: "data/parquet/works/updated_date=2026-01-13/part_0021.parquet"
+          - batch: 12
+            start_after: "data/parquet/works/updated_date=2026-02-20/part_0003.parquet"
+          - batch: 13
+            start_after: "data/parquet/works/updated_date=2026-05-21/part_0025.parquet"
+          - batch: 14
+            start_after: "data/parquet/works/updated_date=2026-05-29/part_0000.parquet"
+          - batch: 15
+            start_after: "data/parquet/works/updated_date=2026-06-26/part_0081.parquet"
+
+    steps:
+      - uses: actions/checkout@v4
+        if: ${{ matrix.batch >= fromJSON(github.event.inputs.start_batch || '1') }}
+
+      - uses: actions/setup-python@v5
+        if: ${{ matrix.batch >= fromJSON(github.event.inputs.start_batch || '1') }}
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install analytics dependencies
+        if: ${{ matrix.batch >= fromJSON(github.event.inputs.start_batch || '1') }}
+        run: pip install -r requirements-analytics.txt
+
+      - name: Install rclone
+        if: ${{ matrix.batch >= fromJSON(github.event.inputs.start_batch || '1') }}
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Show disk headroom
+        if: ${{ matrix.batch >= fromJSON(github.event.inputs.start_batch || '1') }}
+        run: df -h / | tail -1
+
+      - name: Curate OpenAlex batch ${{ matrix.batch }}
+        if: ${{ matrix.batch >= fromJSON(github.event.inputs.start_batch || '1') }}
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        run: |
+          python -m gmsdl.analytics.openalex_curate \
+            --batch "${{ matrix.batch }}" \
+            --start-after "${{ matrix.start_after }}" \
+            --max-keys 500 \
+            --strict
