@@ -13,7 +13,7 @@ sources:
         url: https://databank.worldbank.org/data/download/WDI_CSV.zip
         filename: WDI_CSV.zip
         max_bytes: 1073741824
-        notes: World Development Indicators — the backbone country-year panel.
+        notes: World Development Indicators â€” the backbone country-year panel.
       - id: IDS_CSV
         url: https://databank.worldbank.org/data/download/IDS_CSV.zip
         filename: IDS_CSV.zip
@@ -46,7 +46,7 @@ sources:
     cadence: quarterly
     tier: core
     homepage: https://data.imf.org/en/datasets/IMF.RES:WEO
-    license: IMF terms — free for research with attribution
+    license: IMF terms â€” free for research with attribution
     notes: >
       The old www.imf.org/-/media/files/publications/weo/weodatabase/ paths now
       404. The current file lives on data.imf.org under a GUID directory.
@@ -63,7 +63,7 @@ sources:
     cadence: monthly
     tier: core
     homepage: https://data.bis.org/bulkdownload
-    license: BIS terms of use — free for non-commercial research
+    license: BIS terms of use â€” free for non-commercial research
     params:
       url_template: "https://data.bis.org/static/bulk/{code}_csv_flat.zip"
       filename_template: "{code}_csv_flat.zip"
@@ -112,7 +112,7 @@ sources:
     cadence: quarterly
     tier: extended
     homepage: https://data-explorer.oecd.org/
-    license: OECD terms — free for non-commercial use
+    license: OECD terms â€” free for non-commercial use
     params:
       max_datasets: 40
       doctor_sample: 3
@@ -126,12 +126,27 @@ sources:
     cadence: monthly
     tier: extended
     homepage: https://data.ecb.europa.eu/
-    license: ECB terms — free with attribution
+    license: ECB terms â€” free with attribution
     params:
       max_datasets: 25
       doctor_sample: 3
-      include_regex: "^(EXR|ICP|BSI|MIR|FM|IRS|YC|RAI|STS|GST|BLS)$"
+      include_regex: "^(EXR|ICP|BSI|MIR|FM|IRS|RAI|STS|GST|BLS)$"
 
+  - id: ECB_YC_BULK
+    name: ECB yield-curve SDMX flow (large)
+    subdomain: monetary_policy
+    kind: adapter
+    adapter: sdmx_ecb
+    cadence: monthly
+    tier: bulk
+    homepage: https://data.ecb.europa.eu/
+    license: ECB terms - free with attribution
+    notes: YC exceeds the normal 5 GiB per-file ceiling, so it is isolated from routine extended runs.
+    params:
+      max_datasets: 1
+      doctor_sample: 1
+      include_regex: "^YC$"
+      max_bytes: 7516192768
   - id: EUROSTAT
     name: Eurostat dissemination API
     subdomain: inflation
@@ -140,7 +155,7 @@ sources:
     cadence: monthly
     tier: extended
     homepage: https://ec.europa.eu/eurostat/data/database
-    license: Eurostat re-use policy — free with attribution
+    license: Eurostat re-use policy â€” free with attribution
     notes: >
       Eurostat retired the bulk-download listing entirely. Discovery now goes
       through the catalogue TOC endpoint, not the web tree.
@@ -180,8 +195,8 @@ sources:
     params:
       page_size: 10000
       doctor_sample: 3
+      include_daily_yield_curve: true
       endpoints:
         avg_interest_rates: v2/accounting/od/avg_interest_rates
         debt_to_penny: v2/accounting/od/debt_to_penny
-        daily_treasury_yield: v1/accounting/od/avg_interest_rates
         federal_debt: v2/accounting/od/debt_outstanding

@@ -59,8 +59,9 @@ sources:
         url: https://api.usaspending.gov/api/v2/references/toptier_agencies/
         filename: usaspending_agencies.json
       - id: federal_accounts
-        url: https://api.usaspending.gov/api/v2/federal_accounts/
+        url: https://api.usaspending.gov/api/v2/references/filter_tree/tas/?depth=1
         filename: usaspending_federal_accounts.json
+        notes: GET-compatible Treasury Account Symbol hierarchy; replaces POST-only /federal_accounts/ endpoint.
 
   - id: EU_TED_PROCUREMENT
     name: EU Tenders Electronic Daily

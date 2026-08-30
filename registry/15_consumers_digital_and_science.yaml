@@ -10,8 +10,8 @@ sources:
     license: US federal government work, public domain
     datasets:
       - id: marts_current
-        url: https://www.census.gov/retail/marts/www/adv44x72.txt
-        filename: advance_retail_sales.txt
+        url: https://www.census.gov/retail/marts/www/marts_current.xlsx
+        filename: marts_current.xlsx
 
   - id: FRED_CONSUMER
     name: Consumer prices, sentiment and household finance via FRED
@@ -67,7 +67,7 @@ sources:
         - mobile-cellular-subscriptions-per-100-people
         - broadband-penetration-by-country
         - number-of-internet-users
-        - annual-change-electricity-generation
+        - electricity-production-by-source
         - share-electricity-renewables
 
   - id: WHO_GHO
@@ -77,7 +77,7 @@ sources:
     cadence: quarterly
     tier: extended
     homepage: https://www.who.int/data/gho/info/gho-odata-api
-    license: WHO terms — free with attribution
+    license: WHO terms â€” free with attribution
     datasets:
       - id: gho_indicators
         url: https://ghoapi.azureedge.net/api/Indicator

@@ -88,6 +88,6 @@ sources:
     license: WIPO terms — free for research
     datasets:
       - id: wipo_ip_statistics
-        url: https://www3.wipo.int/ipstats/bulk/IPStats_bulk.zip
-        filename: wipo_ip_statistics.zip
-        notes: Endpoint unconfirmed; doctor will report if the path has moved.
+        url: https://ourworldindata.org/grapher/annual-patent-applications.csv?v=1&csvType=full
+        filename: wipo_annual_patent_applications_owid.csv
+        notes: OWID mirror of WIPO patent-application series via World Bank; used because the old WIPO bulk path now serves HTML.

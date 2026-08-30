@@ -40,7 +40,7 @@ sources:
     cadence: quarterly
     tier: core
     homepage: https://ilostat.ilo.org/data/bulk/
-    license: ILO terms — free with attribution
+    license: ILO terms â€” free with attribution
     params:
       url_template: "https://rplumber.ilo.org/data/indicator/?id={code}&format=.csv"
       filename_template: "ilostat_{code}.csv"
@@ -48,7 +48,6 @@ sources:
       codes:
         - EMP_TEMP_SEX_AGE_NB_A
         - UNE_TUNE_SEX_AGE_NB_A
-        - EAR_4MTH_SEX_ECO_CUR_NB_Q
         - GDP_205U_NOC_NB_A
         - SDG_0922_NOC_RT_A
 

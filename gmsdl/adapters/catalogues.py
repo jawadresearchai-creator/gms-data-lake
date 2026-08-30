@@ -39,7 +39,7 @@ def worldbank_indicators(source: Source, session, settings) -> list[Dataset]:
 def gdelt_window(source: Source, session, settings) -> list[Dataset]:
     """GDELT publishes a master list of every 15-minute file ever produced.
     The full archive is measured in terabytes, so this adapter takes a bounded
-    trailing window instead of the whole list — the previous engine's
+    trailing window instead of the whole list â€” the previous engine's
     ENABLE_GDELT_ALL_STREAMS=True would have tried to fetch all of it."""
     p = source.params
     days = int(p.get("lookback_days", 7))
@@ -155,35 +155,25 @@ def faostat_domains(source: Source, session, settings) -> list[Dataset]:
 
 @register("stlouisfed_fredmd")
 def stlouisfed_fredmd(source: Source, session, settings) -> list[Dataset]:
-    """FRED-MD / FRED-QD moved off files.stlouisfed.org (which now 403s scripted
-    clients) onto a date-versioned media path. Vintages are monthly, so the
-    adapter walks back from the current month until one resolves."""
-    p = source.params
-    base = p.get(
-        "base",
-        "https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md",
-    )
-    today = dt.date.today()
+    """Resolve current FRED-MD/FRED-QD links from the St. Louis Fed page.
+    Guessed future media paths may return HTML with HTTP 200, so use the
+    canonical page's published dated links instead."""
+    page = source.homepage or "https://www.stlouisfed.org/research/economists/mccracken/fred-databases"
+    r = session.get(page, timeout=settings.http_timeout, allow_redirects=True)
+    r.raise_for_status()
+    html = r.text
     out: list[Dataset] = []
     for freq, suffix in (("monthly", "md"), ("quarterly", "qd")):
-        for back in range(0, int(p.get("max_lookback_months", 4))):
-            month = today.month - back
-            year = today.year
-            while month <= 0:
-                month += 12
-                year -= 1
-            vintage = f"{year:04d}-{month:02d}"
-            url = f"{base}/{freq}/{vintage}-{suffix}.csv"
-            try:
-                head = session.head(url, timeout=settings.http_timeout, allow_redirects=True)
-                if head.status_code < 400:
-                    out.append(Dataset(id=f"FRED_{suffix.upper()}", url=url,
-                                       filename=f"fred_{suffix}_{vintage}.csv", tier=source.tier))
-                    break
-            except Exception:
-                continue
+        pat = rf'href="([^"]*/fred-md/{freq}/(\d{{4}}-\d{{2}})-{suffix}\.csv)"'
+        matches = re.findall(pat, html, flags=re.I)
+        if not matches:
+            continue
+        href, vintage = matches[0]
+        if href.startswith("/"):
+            href = "https://www.stlouisfed.org" + href
+        out.append(Dataset(id=f"FRED_{suffix.upper()}", url=href,
+                           filename=f"fred_{suffix}_{vintage}.csv", tier=source.tier))
     return out
-
 
 @register("census_bds")
 def census_bds(source: Source, session, settings) -> list[Dataset]:

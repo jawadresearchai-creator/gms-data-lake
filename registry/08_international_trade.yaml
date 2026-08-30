@@ -7,7 +7,7 @@ sources:
     cadence: quarterly
     tier: extended
     homepage: https://comtradeplus.un.org/
-    license: UN Comtrade terms — free tier with registration
+    license: UN Comtrade terms â€” free tier with registration
     requires_secret: COMTRADE_API_KEY
     headers:
       Ocp-Apim-Subscription-Key: $COMTRADE_API_KEY
@@ -26,7 +26,7 @@ sources:
     cadence: annual
     tier: extended
     homepage: https://apiportal.wto.org/
-    license: WTO terms — free with registration
+    license: WTO terms â€” free with registration
     requires_secret: WTO_API_KEY
     headers:
       Ocp-Apim-Subscription-Key: $WTO_API_KEY
@@ -36,22 +36,24 @@ sources:
         filename: wto_indicators.json
 
   - id: WORLD_BANK_WITS
-    name: World Bank WITS trade and tariff summaries
+    name: World Bank WITS trade and tariff metadata
     subdomain: trade_partners
-    kind: adapter
-    adapter: static_expand
+    kind: static
     cadence: annual
     tier: core
     homepage: https://wits.worldbank.org/
     license: CC BY 4.0
-    params:
-      url_template: "https://wits.worldbank.org/data/public/{code}"
-      filename_template: "{code}"
-      doctor_sample: 2
-      codes:
-        - CountryProfile/en/country/ALL/year/2022/tradeflow/EXPIMP/partner/WLD/product/all
-        - Concordance/HS_to_ISIC.zip
-
+    notes: Uses the current WITS REST API rather than HTML country-profile and retired concordance paths.
+    datasets:
+      - id: tradestats_countries
+        url: https://wits.worldbank.org/API/V1/wits/datasource/tradestats-trade/country/ALL?format=JSON
+        filename: wits_tradestats_countries.xml
+      - id: tradestats_indicators
+        url: https://wits.worldbank.org/API/V1/wits/datasource/tradestats-trade/indicator/ALL?format=JSON
+        filename: wits_tradestats_indicators.xml
+      - id: tradestats_products
+        url: https://wits.worldbank.org/API/V1/wits/datasource/tradestats-trade/product/ALL?format=JSON
+        filename: wits_tradestats_products.xml
   - id: OWID_TRADE
     name: Our World in Data trade and globalisation series
     subdomain: global_value_chains
@@ -67,6 +69,6 @@ sources:
       doctor_sample: 3
       codes:
         - trade-as-share-of-gdp
-        - merchandise-exports-gdpcp
+        - merchandise-exports-gdp-cepii
         - foreign-direct-investment-net-inflows-of-gdp
-        - share-of-world-merchandise-exports
+        - share-of-global-merchandise-exports

@@ -79,9 +79,9 @@ sources:
     license: IRENA terms — free for research
     datasets:
       - id: irena_capacity
-        url: https://www.irena.org/-/media/Files/IRENA/Agency/Publication/2024/Jul/IRENA_Stats_Extract_2024.xlsx
-        filename: irena_capacity.xlsx
-        notes: Release-dated path; verify with doctor before scheduling.
+        url: https://ourworldindata.org/grapher/installed-global-renewable-energy-capacity-by-technology.csv?v=1&csvType=full
+        filename: irena_renewable_capacity_owid.csv
+        notes: OWID mirror of IRENA renewable-capacity data, used because irena.org blocks scripted bulk clients; retain IRENA provenance.
 
   - id: EMDAT_DISASTERS
     name: Disaster and hazard event context

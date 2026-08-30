@@ -10,8 +10,8 @@ sources:
     license: US federal government work, public domain
     datasets:
       - id: g17_ip_current
-        url: https://www.federalreserve.gov/datadownload/Output.aspx?rel=G17&filetype=csv&label=include&layout=seriescolumn
-        filename: g17_industrial_production.csv
+        url: https://www.federalreserve.gov/releases/g17/data/FRB_g17_xml.zip
+        filename: FRB_g17_xml.zip
 
   - id: NYFED_GSCPI
     name: New York Fed Global Supply Chain Pressure Index
@@ -36,9 +36,9 @@ sources:
     license: US federal government work, public domain
     datasets:
       - id: tsi_freight
-        url: https://www.bts.gov/sites/bts.dot.gov/files/docs/TSI.csv
+        url: https://fred.stlouisfed.org/graph/fredgraph.csv?id=TSIFRGHT
         filename: transportation_services_index.csv
-        notes: Endpoint unconfirmed; doctor will report if it has moved.
+        notes: FRED mirror of the BTS Freight Transportation Services Index; source provenance remains BTS.
 
   - id: OECD_ICIO
     name: OECD inter-country input-output tables

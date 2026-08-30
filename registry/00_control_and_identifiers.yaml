@@ -54,11 +54,11 @@ sources:
       https://leidata.gleif.org/api/v2/golden-copies/publishes
     datasets:
       - id: lei2_golden_copy
-        url: https://leidata-preview.gleif.org/storage/golden-copy-files/latest/lei2-golden-copy.csv.zip
+        url: https://goldencopy.gleif.org/api/v2/golden-copies/publishes/lei2/latest.csv
         filename: lei2-golden-copy.csv.zip
         max_bytes: 3221225472
       - id: rr_golden_copy
-        url: https://leidata-preview.gleif.org/storage/golden-copy-files/latest/rr-golden-copy.csv.zip
+        url: https://goldencopy.gleif.org/api/v2/golden-copies/publishes/rr/latest.csv
         filename: rr-golden-copy.csv.zip
 
   - id: GEONAMES

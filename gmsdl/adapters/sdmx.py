@@ -88,7 +88,8 @@ def sdmx_ecb(source: Source, session, settings) -> list[Dataset]:
     out = []
     for _agency, fid, name in kept:
         url = f"https://data-api.ecb.europa.eu/service/data/{fid}?format=csvdata"
-        out.append(Dataset(id=fid, url=url, filename=f"{fid}.csv", notes=name, tier=source.tier))
+        out.append(Dataset(id=fid, url=url, filename=f"{fid}.csv", notes=name, tier=source.tier,
+                           max_bytes=int(p["max_bytes"]) if p.get("max_bytes") else None))
     return out
 
 

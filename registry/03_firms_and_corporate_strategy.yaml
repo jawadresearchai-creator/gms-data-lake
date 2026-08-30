@@ -15,7 +15,7 @@ sources:
     params:
       vintage: 2023
       doctor_sample: 3
-      tables: ["", "_sec", "_st", "_msa", "_vcn4", "_fa", "_fage"]
+      tables: ["", "_sec", "_st", "_msa", "_vcn4", "_fa", "_fz"]
 
   - id: CENSUS_BFS
     name: Census Business Formation Statistics
@@ -30,8 +30,11 @@ sources:
         url: https://www.census.gov/econ/bfs/csv/bfs_monthly.csv
         filename: bfs_monthly.csv
       - id: bfs_apps_naics
-        url: https://www.census.gov/econ/bfs/csv/date_table_for_working_paper.csv
-        filename: bfs_naics.csv
+        url: https://www.census.gov/econ/bfs/csv/naics2.csv
+        filename: bfs_naics2.csv
+      - id: bfs_apps_naics3
+        url: https://www.census.gov/econ/bfs/csv/naics3.csv
+        filename: bfs_naics3.csv
 
   - id: CENSUS_CBP
     name: County Business Patterns
