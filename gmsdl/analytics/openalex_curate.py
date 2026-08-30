@@ -209,6 +209,76 @@ def materialize_scalar_master(raw_path: Path, out_path: Path, source_key: str) -
         con.close()
 
 
+
+def materialize_work_edges(raw_path: Path, out_dir: Path, source_key: str) -> dict[str, Path]:
+    """Materialise the core graph edges exposed by the live OpenAlex works schema."""
+    import duckdb
+
+    con = duckdb.connect(database=":memory:")
+    raw_sql = sql_literal(str(raw_path))
+    source_sql = sql_literal(source_key)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    outputs: dict[str, Path] = {}
+    queries = {
+        "CITATION_EDGES": f"""
+            SELECT id AS work_id, unnest(referenced_works) AS referenced_work_id,
+                   {source_sql} AS _source_key
+            FROM read_parquet({raw_sql})
+            WHERE referenced_works IS NOT NULL
+        """,
+        "WORK_TOPIC_EDGES": f"""
+            SELECT w.id AS work_id, t.topic.id AS topic_id,
+                   t.topic.display_name AS topic_display_name, t.topic.score AS topic_score,
+                   {source_sql} AS _source_key
+            FROM read_parquet({raw_sql}) AS w,
+                 UNNEST(w.topics) AS t(topic)
+        """,
+        "WORK_AUTHOR_EDGES": f"""
+            SELECT w.id AS work_id, a.authorship.author.id AS author_id,
+                   a.authorship.author_position AS author_position,
+                   a.authorship.is_corresponding AS is_corresponding,
+                   {source_sql} AS _source_key
+            FROM read_parquet({raw_sql}) AS w,
+                 UNNEST(w.authorships) AS a(authorship)
+        """,
+        "AUTHOR_INSTITUTION_EDGES": f"""
+            SELECT w.id AS work_id, a.authorship.author.id AS author_id,
+                   i.institution.id AS institution_id,
+                   i.institution.country_code AS institution_country_code,
+                   a.authorship.author_position AS author_position,
+                   a.authorship.is_corresponding AS is_corresponding,
+                   {source_sql} AS _source_key
+            FROM read_parquet({raw_sql}) AS w,
+                 UNNEST(w.authorships) AS a(authorship),
+                 UNNEST(a.authorship.institutions) AS i(institution)
+        """,
+        "COUNTRY_COLLAB_EDGES": f"""
+            WITH work_country AS (
+                SELECT DISTINCT w.id AS work_id, c.country AS country_code
+                FROM read_parquet({raw_sql}) AS w,
+                     UNNEST(w.authorships) AS a(authorship),
+                     UNNEST(a.authorship.countries) AS c(country)
+                WHERE c.country IS NOT NULL AND c.country <> ''
+            )
+            SELECT a.work_id, a.country_code AS country_a, b.country_code AS country_b,
+                   {source_sql} AS _source_key
+            FROM work_country a
+            JOIN work_country b ON a.work_id = b.work_id AND a.country_code < b.country_code
+        """,
+    }
+    try:
+        for table, query in queries.items():
+            path = out_dir / f"{table}.parquet"
+            con.execute(
+                f"COPY ({query}) TO {sql_literal(str(path))} "
+                "(FORMAT PARQUET, COMPRESSION ZSTD)"
+            )
+            outputs[table] = path
+        return outputs
+    finally:
+        con.close()
+
+
 def write_report(path: Path, *, batch: int, rows: list[dict], started: str) -> None:
     ok = sum(1 for r in rows if r["status"] == "OK")
     skipped = sum(1 for r in rows if r["status"] == "SKIPPED")
@@ -279,9 +349,22 @@ def curate_batch(*, batch: int, start_after: str, max_keys: int, strict: bool) -
                         raise RuntimeError(f"size mismatch: expected {expected_size}, got {actual_in}")
 
                     scalar_count, _schema = materialize_scalar_master(raw_local, out_local, key)
-                    out_bytes = out_local.stat().st_size
-                    digest = sha256_file(out_local)
-                    run_rclone(["copyto", str(out_local), f"{curated_base}/{rel}"], timeout=3600)
+                    output_files: dict[str, tuple[Path, str]] = {"MASTER": (out_local, rel)}
+                    if entity == "works":
+                        tail = rel.split("/", 1)[1]
+                        edge_outputs = materialize_work_edges(raw_local, work / "edges", key)
+                        for table, edge_path in edge_outputs.items():
+                            output_files[table] = (edge_path, f"{table}/{tail}")
+
+                    out_bytes = sum(path.stat().st_size for path, _ in output_files.values())
+                    digest_material = "\n".join(
+                        f"{name}:{sha256_file(path)}"
+                        for name, (path, _) in sorted(output_files.items())
+                    )
+                    digest = hashlib.sha256(digest_material.encode("ascii")).hexdigest()
+                    for path, remote_rel in output_files.values():
+                        run_rclone(["copyto", str(path), f"{curated_base}/{remote_rel}"], timeout=3600)
+
                     record_state(
                         conn,
                         key=key,
@@ -311,6 +394,9 @@ def curate_batch(*, batch: int, start_after: str, max_keys: int, strict: bool) -
                 finally:
                     raw_local.unlink(missing_ok=True)
                     out_local.unlink(missing_ok=True)
+                    edge_dir = work / "edges"
+                    if edge_dir.exists():
+                        shutil.rmtree(edge_dir, ignore_errors=True)
 
                 # Checkpoint after every object so a runner interruption loses at most one file.
                 run_rclone(["copyto", str(state_path), state_remote], timeout=600)
