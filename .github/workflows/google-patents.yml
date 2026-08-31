@@ -8,9 +8,13 @@ on:
         required: true
         default: "US"
       year:
-        description: "Publication year to export"
+        description: "Publication year (blank = all years)"
+        required: false
+        default: ""
+      family:
+        description: "Column family: id_dates, entities, classes, citations, text"
         required: true
-        default: "2025"
+        default: "id_dates"
       execute:
         description: "Execute after dry-run cost guard (false = estimate only)"
         type: boolean
@@ -44,11 +48,6 @@ jobs:
       - name: Install patent analytics dependencies
         run: pip install -r requirements-patents.txt
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_BIGQUERY_CREDENTIALS }}
-
       - name: Install rclone
         if: ${{ inputs.execute }}
         run: |
@@ -63,13 +62,19 @@ jobs:
           RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
           RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
           RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          GCP_OAUTH_CLIENT_ID: ${{ secrets.GCP_OAUTH_CLIENT_ID }}
+          GCP_OAUTH_CLIENT_SECRET: ${{ secrets.GCP_OAUTH_CLIENT_SECRET }}
+          GCP_OAUTH_REFRESH_TOKEN: ${{ secrets.GCP_OAUTH_REFRESH_TOKEN }}
         run: |
           ARGS=(
             --project "${{ secrets.GCP_BIGQUERY_PROJECT_ID }}"
             --country "${{ inputs.country }}"
-            --year "${{ inputs.year }}"
+            --family "${{ inputs.family }}"
             --max-bytes-billed "${{ inputs.max_bytes_billed }}"
           )
+          if [[ -n "${{ inputs.year }}" ]]; then
+            ARGS+=(--year "${{ inputs.year }}")
+          fi
           if [[ "${{ inputs.execute }}" == "true" ]]; then
             ARGS+=(--execute)
           fi

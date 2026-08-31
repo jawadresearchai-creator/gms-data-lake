@@ -20,21 +20,34 @@ TABLE = "patents-public-data.patents.publications"
 REMOTE_BASE = "gdrive:01_RAW_IMMUTABLE/04_INNOVATION_AND_TECHNOLOGY/patents/GOOGLE_PATENTS_PUBLIC"
 CONTROL_BASE = "gdrive:00_CONTROL/analytics/google_patents"
 
-COLUMNS = [
-    "publication_number", "application_number", "country_code", "kind_code",
-    "application_kind", "application_number_formatted", "pct_number", "family_id",
-    "title_localized", "abstract_localized", "publication_date", "filing_date",
-    "grant_date", "priority_date", "priority_claim", "inventor",
-    "inventor_harmonized", "assignee", "assignee_harmonized", "examiner",
-    "uspc", "ipc", "cpc", "fi", "fterm", "citation", "entity_status", "art_unit",
-]
+COLUMN_FAMILIES = {
+    "id_dates": [
+        "publication_number", "application_number", "country_code", "kind_code",
+        "application_kind", "application_number_formatted", "pct_number", "family_id",
+        "publication_date", "filing_date", "grant_date", "priority_date", "priority_claim",
+        "entity_status", "art_unit",
+    ],
+    "entities": [
+        "publication_number", "country_code", "inventor", "inventor_harmonized",
+        "assignee", "assignee_harmonized", "examiner",
+    ],
+    "classes": [
+        "publication_number", "country_code", "uspc", "ipc", "cpc", "fi", "fterm",
+    ],
+    "citations": ["publication_number", "country_code", "citation"],
+    "text": ["publication_number", "country_code", "title_localized", "abstract_localized"],
+}
+COLUMNS = sorted({c for cols in COLUMN_FAMILIES.values() for c in cols})
 
 
-def build_sql(country: str, year: int) -> str:
-    lo = year * 10000 + 101
-    hi = year * 10000 + 1231
-    cols = ",\n  ".join(COLUMNS)
-    return f"""SELECT\n  {cols}\nFROM `{TABLE}`\nWHERE country_code = @country\n  AND publication_date BETWEEN @lo AND @hi\n"""
+def build_sql(country: str, year: int | None = None, family: str = "id_dates") -> str:
+    if family not in COLUMN_FAMILIES:
+        raise ValueError(f"unknown column family: {family}")
+    cols = ",\n  ".join(COLUMN_FAMILIES[family])
+    where = "country_code = @country"
+    if year is not None:
+        where += "\n  AND publication_date BETWEEN @lo AND @hi"
+    return f"""SELECT\n  {cols}\nFROM `{TABLE}`\nWHERE {where}\n"""
 
 
 def sha256_file(path: Path) -> str:
@@ -53,24 +66,37 @@ def rclone_copy(local: Path, remote: str) -> None:
         raise RuntimeError((p.stderr or p.stdout or "rclone failed")[-1000:])
 
 
-def export_partition(*, project: str, country: str, year: int,
+def export_partition(*, project: str, country: str, year: int | None, family: str,
                      max_bytes_billed: int, execute: bool) -> dict:
     from google.cloud import bigquery
     import pyarrow.parquet as pq
 
-    client = bigquery.Client(project=project)
-    sql = build_sql(country, year)
-    params = [
-        bigquery.ScalarQueryParameter("country", "STRING", country),
-        bigquery.ScalarQueryParameter("lo", "INT64", year * 10000 + 101),
-        bigquery.ScalarQueryParameter("hi", "INT64", year * 10000 + 1231),
-    ]
+    credentials = None
+    refresh_token = os.environ.get("GCP_OAUTH_REFRESH_TOKEN")
+    if refresh_token:
+        from google.oauth2.credentials import Credentials
+        credentials = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=os.environ["GCP_OAUTH_CLIENT_ID"],
+            client_secret=os.environ["GCP_OAUTH_CLIENT_SECRET"],
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+    client = bigquery.Client(project=project, credentials=credentials)
+    sql = build_sql(country, year, family)
+    params = [bigquery.ScalarQueryParameter("country", "STRING", country)]
+    if year is not None:
+        params.extend([
+            bigquery.ScalarQueryParameter("lo", "INT64", year * 10000 + 101),
+            bigquery.ScalarQueryParameter("hi", "INT64", year * 10000 + 1231),
+        ])
     dry_cfg = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False,
                                       query_parameters=params)
     dry_job = client.query(sql, job_config=dry_cfg)
     billed = int(dry_job.total_bytes_processed or 0)
     result = {
-        "table": TABLE, "country": country, "year": year,
+        "table": TABLE, "country": country, "year": year, "family": family,
         "dry_run_bytes": billed, "max_bytes_billed": max_bytes_billed,
         "executed": False,
     }
@@ -93,8 +119,9 @@ def export_partition(*, project: str, country: str, year: int,
     control_base = os.environ.get("GMSDL_GOOGLE_PATENTS_CONTROL_REMOTE", CONTROL_BASE).rstrip("/")
     stamp = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
-    with tempfile.TemporaryDirectory(prefix=f"gmsdl-patents-{country}-{year}-") as td:
-        out = Path(td) / f"publications_{country}_{year}.parquet"
+    year_label = str(year) if year is not None else "all"
+    with tempfile.TemporaryDirectory(prefix=f"gmsdl-patents-{country}-{family}-{year_label}-") as td:
+        out = Path(td) / f"publications_{country}_{family}_{year_label}.parquet"
         writer = None
         row_count = 0
         try:
@@ -110,9 +137,9 @@ def export_partition(*, project: str, country: str, year: int,
             raise RuntimeError("query returned zero rows")
 
         digest = sha256_file(out)
-        remote = f"{remote_base}/country={country}/publication_year={year}/{out.name}"
+        remote = f"{remote_base}/country={country}/family={family}/publication_year={year_label}/{out.name}"
         rclone_copy(out, remote)
-        report = Path(td) / f"google_patents_{country}_{year}.json"
+        report = Path(td) / f"google_patents_{country}_{family}_{year_label}.json"
         result.update({
             "executed": True, "rows": row_count, "output_bytes": out.stat().st_size,
             "sha256": digest, "remote": remote, "completed_at": stamp,
@@ -128,11 +155,12 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--project", required=True)
     p.add_argument("--country", default="US")
-    p.add_argument("--year", type=int, required=True)
+    p.add_argument("--year", type=int)
+    p.add_argument("--family", choices=sorted(COLUMN_FAMILIES), default="id_dates")
     p.add_argument("--max-bytes-billed", type=int, default=100_000_000_000)
     p.add_argument("--execute", action="store_true")
     a = p.parse_args()
-    print(json.dumps(export_partition(project=a.project, country=a.country, year=a.year,
+    print(json.dumps(export_partition(project=a.project, country=a.country, year=a.year, family=a.family,
                                       max_bytes_billed=a.max_bytes_billed,
                                       execute=a.execute), indent=2))
     return 0
