@@ -1,0 +1,76 @@
+name: Google Patents Public Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      country:
+        description: "Patent jurisdiction country code"
+        required: true
+        default: "US"
+      year:
+        description: "Publication year to export"
+        required: true
+        default: "2025"
+      execute:
+        description: "Execute after dry-run cost guard (false = estimate only)"
+        type: boolean
+        required: true
+        default: false
+      max_bytes_billed:
+        description: "Hard BigQuery bytes-billed cap for this partition"
+        required: true
+        default: "100000000000"
+
+concurrency:
+  group: gmsdl-google-patents-${{ inputs.country }}-${{ inputs.year }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install patent analytics dependencies
+        run: pip install -r requirements-patents.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_BIGQUERY_CREDENTIALS }}
+
+      - name: Install rclone
+        if: ${{ inputs.execute }}
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: BigQuery dry-run / export
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        run: |
+          ARGS=(
+            --project "${{ secrets.GCP_BIGQUERY_PROJECT_ID }}"
+            --country "${{ inputs.country }}"
+            --year "${{ inputs.year }}"
+            --max-bytes-billed "${{ inputs.max_bytes_billed }}"
+          )
+          if [[ "${{ inputs.execute }}" == "true" ]]; then
+            ARGS+=(--execute)
+          fi
+          python -m gmsdl.analytics.google_patents "${ARGS[@]}"

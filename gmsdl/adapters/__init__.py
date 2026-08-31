@@ -1,5 +1,5 @@
 """Adapters enumerate datasets at run time from official machine-readable
-catalogues — SDMX dataflow lists, JSON APIs, S3 bucket listings.
+catalogues â€” SDMX dataflow lists, JSON APIs, S3 bucket listings.
 
 They exist because the previous engine tried to discover files by crawling HTML
 landing pages with BeautifulSoup. Most statistical portals (data.imf.org,
@@ -43,6 +43,6 @@ def available() -> list[str]:
 
 
 # Importing the modules populates the registry.
-from . import sdmx, catalogues, buckets  # noqa: E402,F401
+from . import sdmx, catalogues, buckets, external  # noqa: E402,F401
 
 __all__ = ["Adapter", "Dataset", "Source", "register", "get", "available"]

@@ -1,6 +1,46 @@
 domain: "04_INNOVATION_AND_TECHNOLOGY"
 sources:
+  - id: GOOGLE_PATENTS_PUBLIC
+    name: Google Patents Public Data on BigQuery
+    subdomain: patents
+    kind: adapter
+    adapter: bigquery_public
+    cadence: quarterly
+    tier: massive
+    enabled: false
+    homepage: https://console.cloud.google.com/bigquery?p=patents-public-data&d=patents&page=dataset
+    license: CC BY 4.0 (IFI CLAIMS Patent Services and Google)
+    notes: >
+      Primary patent-data replacement for the ID.me-gated USPTO/PatentsView path.
+      Worldwide bibliographic data with US full text. Managed by the dedicated
+      google-patents.yml workflow rather than the generic URL ingestion engine;
+      disabled here so routine runs cannot accidentally invoke BigQuery or incur
+      query charges. Every execution must pass a BigQuery dry-run byte cap.
+    params:
+      table: patents-public-data.patents.publications
+      primary_country: US
+      dedicated_workflow: google-patents.yml
+
+  - id: EPO_OPS
+    name: EPO Open Patent Services
+    subdomain: patents
+    kind: adapter
+    adapter: external_validation
+    cadence: quarterly
+    tier: extended
+    enabled: false
+    homepage: https://www.epo.org/en/searching-for-patents/data/web-services/ops
+    license: EPO OPS terms and fair-use charter
+    notes: >
+      Independent authoritative validation/enrichment source. Free usage is
+      limited to 4 GB per calendar week and requires EPO registration/OAuth, so
+      it is intentionally not used for full-lake bulk acquisition.
+    params:
+      role: validation_enrichment
+      free_weekly_bytes: 4294967296
+
   - id: USPTO_ODP
+    enabled: false
     name: USPTO Open Data Portal bulk products
     subdomain: patents
     kind: static
@@ -11,7 +51,8 @@ sources:
     notes: >
       bulkdata.uspto.gov was retired and the old PatentsView download pages now
       redirect to data.uspto.gov. Endpoints below are the current portal's;
-      verify with `gmsdl doctor` before relying on a full backfill.
+      Optional authoritative source; currently blocked by USPTO account/identity access.
+      Keep disabled until valid ODP access exists; it must not block the patent domain.
     datasets:
       - id: patent_grant_index
         url: https://bulkdata.uspto.gov/data/patent/grant/redbook/fulltext/2025/
@@ -20,6 +61,7 @@ sources:
         notes: Index page only â€” used to detect whether the legacy host still resolves.
 
   - id: PATENTSVIEW
+    enabled: false
     name: PatentsView research-ready patent tables
     subdomain: patents
     kind: adapter
@@ -28,7 +70,9 @@ sources:
     tier: bulk
     homepage: https://patentsview.org/
     license: CC BY 4.0
-    notes: Large tables; kept at tier `bulk` so routine runs skip them.
+    notes: >
+      Optional legacy/research source. Current distribution is tied to USPTO ODP
+      access; disabled so it cannot block Google Patents primary ingestion.
     params:
       url_template: "https://s3.amazonaws.com/data.patentsview.org/download/{code}.tsv.zip"
       filename_template: "{code}.tsv.zip"

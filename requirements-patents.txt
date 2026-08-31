@@ -1,0 +1,3 @@
+-r requirements.txt
+google-cloud-bigquery>=3.25,<4
+pyarrow>=17,<20
