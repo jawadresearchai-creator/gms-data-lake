@@ -1,0 +1,72 @@
+name: Verify OpenAlex Curated Layer
+
+on:
+  workflow_run:
+    workflows: ["OpenAlex Research Curation"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install rclone and sqlite
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sqlite3 jq
+
+      - name: Reconcile raw manifest, curation states, and curated Drive layer
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p state
+
+          rclone copyto \
+            gdrive:00_CONTROL/manifests/manifest_04_INNOVATION_AND_TECHNOLOGY.sqlite \
+            raw-manifest.sqlite --stats 0
+
+          for b in $(seq -w 1 15); do
+            rclone copyto \
+              "gdrive:00_CONTROL/analytics/openalex/openalex_curate_batch_${b}.sqlite" \
+              "state/openalex_curate_batch_${b}.sqlite" --stats 0
+          done
+
+          python -m gmsdl.analytics.openalex_verify_curated \
+            --raw-manifest raw-manifest.sqlite \
+            --state-dir state \
+            --output curation-summary.json
+
+          rclone size gdrive:02_CURATED/openalex/v1 --json > curated-size.json
+          curated_count=$(jq -r '.count' curated-size.json)
+          curated_bytes=$(jq -r '.bytes' curated-size.json)
+          state_ok=$(jq -r '.state_ok' curation-summary.json)
+          state_bytes_out=$(jq -r '.state_bytes_out' curation-summary.json)
+
+          echo "curated_count=$curated_count"
+          echo "curated_bytes=$curated_bytes"
+          echo "state_ok=$state_ok"
+          echo "state_bytes_out=$state_bytes_out"
+
+          (( curated_count >= state_ok )) || { echo "ERROR: curated object count is smaller than curated source-key count" >&2; exit 1; }
+          (( curated_bytes > 0 && state_bytes_out > 0 )) || { echo "ERROR: curated layer is empty" >&2; exit 1; }
+
+          echo "VERIFIED: OpenAlex curated layer reconciles to the full verified raw snapshot."
