@@ -1,0 +1,68 @@
+name: OpenAlex Catalog Smoke Test
+
+on:
+  workflow_run:
+    workflows: ["Verify OpenAlex Curated Layer"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  catalog:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Stage representative curated shards and build DuckDB catalog
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staged catalog
+          tables=(WORK_MASTER AUTHOR_MASTER INSTITUTION_MASTER SOURCE_MASTER TOPIC_MASTER CITATION_EDGES WORK_AUTHOR_EDGES AUTHOR_INSTITUTION_EDGES WORK_TOPIC_EDGES COUNTRY_COLLAB_EDGES)
+          staged=0
+          for table in "${tables[@]}"; do
+            remote="gdrive:02_CURATED/openalex/v1/$table"
+            first=$(rclone lsf "$remote" --files-only --recursive 2>/dev/null | grep -E '\.parquet$' | head -1 || true)
+            if [[ -z "$first" ]]; then
+              echo "No shard found for $table; skipping."
+              continue
+            fi
+            mkdir -p "staged/$table/$(dirname "$first")"
+            rclone copyto "$remote/$first" "staged/$table/$first" --stats 0
+            echo "Staged $table/$first"
+            staged=$((staged+1))
+          done
+          (( staged >= 5 )) || { echo "ERROR: too few curated tables were available for catalog smoke test" >&2; exit 1; }
+
+          python -m gmsdl.analytics.openalex_catalog \
+            --root staged \
+            --db catalog/openalex-smoke.duckdb \
+            --metadata catalog/catalog-smoke.json
+
+          rclone copy catalog \
+            gdrive:03_RESEARCH/openalex/v1/catalog/smoke \
+            --stats 0
