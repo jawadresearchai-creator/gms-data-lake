@@ -1,0 +1,58 @@
+name: Verify OpenAlex Snapshot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install rclone and sqlite
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sqlite3 jq
+
+      - name: Compare Drive raw snapshot with manifest
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          raw="gdrive:01_RAW_IMMUTABLE/04_INNOVATION_AND_TECHNOLOGY/scientific_publications/OPENALEX_SNAPSHOT"
+          manifest_remote="gdrive:00_CONTROL/manifests/manifest_04_INNOVATION_AND_TECHNOLOGY.sqlite"
+
+          echo "Measuring OpenAlex objects already durable in Google Drive..."
+          rclone size "$raw" --json > drive-size.json
+          drive_count=$(jq -r '.count' drive-size.json)
+          drive_bytes=$(jq -r '.bytes' drive-size.json)
+
+          echo "Fetching only the small control manifest..."
+          rclone copyto "$manifest_remote" manifest.sqlite
+
+          read -r manifest_count manifest_bytes < <(
+            sqlite3 -separator ' ' manifest.sqlite \
+              "SELECT COUNT(*), COALESCE(SUM(bytes),0) FROM files WHERE source_id='OPENALEX_SNAPSHOT' AND status='OK';"
+          )
+
+          printf 'Drive OpenAlex files: %s\n' "$drive_count"
+          printf 'Drive OpenAlex bytes: %s\n' "$drive_bytes"
+          printf 'Manifest OpenAlex OK files: %s\n' "$manifest_count"
+          printf 'Manifest OpenAlex OK bytes: %s\n' "$manifest_bytes"
+
+          if [[ "$drive_count" != "$manifest_count" || "$drive_bytes" != "$manifest_bytes" ]]; then
+            echo "ERROR: Drive and manifest totals do not match." >&2
+            exit 1
+          fi
+
+          echo "VERIFIED: Drive and manifest OpenAlex totals match exactly."
