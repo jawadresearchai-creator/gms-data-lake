@@ -16,73 +16,73 @@ jobs:
   watchdog:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect latest curation run and recover if safe
+      - name: Inspect curation runs and recover if safe
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          RUN_JSON=$(gh api "/repos/$REPO/actions/workflows/openalex-curate.yml/runs?per_page=20")
-          RUN_ID=$(jq -r '.workflow_runs[0].id // empty' <<<"$RUN_JSON")
-          STATUS=$(jq -r '.workflow_runs[0].status // empty' <<<"$RUN_JSON")
-          CONCLUSION=$(jq -r '.workflow_runs[0].conclusion // empty' <<<"$RUN_JSON")
-          UPDATED=$(jq -r '.workflow_runs[0].updated_at // empty' <<<"$RUN_JSON")
 
-          [[ -n "$RUN_ID" ]] || { echo "No curation run exists yet."; exit 0; }
-          echo "Latest curation: id=$RUN_ID status=$STATUS conclusion=$CONCLUSION updated=$UPDATED"
+          RUNS=$(gh api "/repos/$REPO/actions/workflows/openalex-curate.yml/runs?per_page=20")
+          LATEST_ID=$(jq -r '.workflow_runs[0].id // empty' <<<"$RUNS")
+          LATEST_STATUS=$(jq -r '.workflow_runs[0].status // empty' <<<"$RUNS")
+          LATEST_CONCLUSION=$(jq -r '.workflow_runs[0].conclusion // empty' <<<"$RUNS")
+          LATEST_EVENT=$(jq -r '.workflow_runs[0].event // empty' <<<"$RUNS")
+          LATEST_UPDATED=$(jq -r '.workflow_runs[0].updated_at // empty' <<<"$RUNS")
 
-          if [[ "$STATUS" =~ ^(queued|in_progress|waiting|pending)$ ]]; then
-            echo "Curation is active; watchdog is idle."
+          [[ -n "$LATEST_ID" ]] || { echo "No curation run exists yet."; exit 0; }
+          echo "Latest curation: id=$LATEST_ID status=$LATEST_STATUS conclusion=$LATEST_CONCLUSION event=$LATEST_EVENT updated=$LATEST_UPDATED"
+
+          # If a recovery run is already queued/running, never create another one.
+          ACTIVE_RECOVERY=$(jq -r '[.workflow_runs[] | select(.event=="workflow_dispatch" and (.status=="queued" or .status=="in_progress" or .status=="waiting" or .status=="pending"))][0].id // empty' <<<"$RUNS")
+          if [[ -n "$ACTIVE_RECOVERY" ]]; then
+            echo "Recovery run $ACTIVE_RECOVERY is already active/queued; watchdog is idle."
             exit 0
           fi
-          if [[ "$CONCLUSION" == "success" ]]; then
+
+          # Inspect the newest non-recovery run, even while its matrix is still active.
+          BASE_ID=$(jq -r '[.workflow_runs[] | select(.event!="workflow_dispatch")][0].id // empty' <<<"$RUNS")
+          if [[ -z "$BASE_ID" ]]; then
+            BASE_ID="$LATEST_ID"
+          fi
+          BASE_STATUS=$(jq -r --argjson id "$BASE_ID" '.workflow_runs[] | select(.id==$id) | .status' <<<"$RUNS")
+          BASE_CONCLUSION=$(jq -r --argjson id "$BASE_ID" '.workflow_runs[] | select(.id==$id) | (.conclusion // "")' <<<"$RUNS")
+          echo "Base curation run: id=$BASE_ID status=$BASE_STATUS conclusion=$BASE_CONCLUSION"
+
+          JOBS=$(gh api --paginate "/repos/$REPO/actions/runs/$BASE_ID/jobs?per_page=100")
+
+          # A cancelled curation step is the expected signature of our 350-minute timeout.
+          INCOMPLETE_NAME=$(jq -r '[.jobs[] | select(.conclusion=="cancelled" or .conclusion=="failure" or .conclusion=="timed_out") | select(.name|startswith("curate ("))][0].name // empty' <<<"$JOBS")
+
+          if [[ -n "$INCOMPLETE_NAME" ]]; then
+            BATCH=$(sed -nE 's/.*curate \(([0-9]+).*/\1/p' <<<"$INCOMPLETE_NAME")
+            [[ -n "$BATCH" ]] || { echo "Cannot parse batch from: $INCOMPLETE_NAME"; exit 1; }
+            echo "Detected incomplete batch $BATCH: $INCOMPLETE_NAME"
+
+            # If any other workflow-dispatch run already exists after this base run,
+            # assume recovery has already been requested and avoid duplicates.
+            BASE_CREATED=$(jq -r --argjson id "$BASE_ID" '.workflow_runs[] | select(.id==$id) | .created_at' <<<"$RUNS")
+            ALREADY_REQUESTED=$(jq -r --arg t "$BASE_CREATED" '[.workflow_runs[] | select(.event=="workflow_dispatch" and .created_at > $t)][0].id // empty' <<<"$RUNS")
+            if [[ -n "$ALREADY_REQUESTED" ]]; then
+              echo "Recovery was already requested as run $ALREADY_REQUESTED; watchdog is idle."
+              exit 0
+            fi
+
+            echo "Queueing state-aware recovery from batch $BATCH."
+            echo "The recovery uses the same deterministic 500-object ranges; the Drive state DB skips already completed objects."
+            gh workflow run openalex-curate.yml --repo "$REPO" -f start_batch="$BATCH"
+            exit 0
+          fi
+
+          if [[ "$BASE_STATUS" =~ ^(queued|in_progress|waiting|pending)$ ]]; then
+            echo "Base curation is active and has no incomplete batches yet; watchdog is idle."
+            exit 0
+          fi
+
+          if [[ "$BASE_CONCLUSION" == "success" ]]; then
             echo "OpenAlex curation completed successfully."
             exit 0
           fi
 
-          JOBS=$(gh api --paginate "/repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100")
-          FAILED_NAME=$(jq -r '[.jobs[] | select(.conclusion=="failure" or .conclusion=="timed_out")][0].name // empty' <<<"$JOBS")
-          [[ -n "$FAILED_NAME" ]] || { echo "No failed/timed-out batch found; not guessing."; exit 0; }
-
-          BATCH=$(sed -nE 's/.*curate \(([0-9]+).*/\1/p' <<<"$FAILED_NAME")
-          [[ -n "$BATCH" ]] || { echo "Cannot parse batch from: $FAILED_NAME"; exit 1; }
-          echo "Resume point: batch $BATCH"
-
-          JOB_ID=$(jq -r --arg n "$FAILED_NAME" '.jobs[] | select(.name==$n) | .id' <<<"$JOBS" | head -1)
-          LOG=$(mktemp)
-          gh api "/repos/$REPO/actions/jobs/$JOB_ID/logs" >"$LOG" 2>/dev/null || true
-          QUOTA=0
-          if grep -Eqi 'storageQuotaExceeded|750.?GB|upload quota|daily.*quota|quota.*exceeded|userRateLimitExceeded' "$LOG"; then
-            QUOTA=1
-          fi
-
-          NOW=$(date -u +%s)
-          THEN=$(date -u -d "$UPDATED" +%s)
-          AGE=$((NOW-THEN))
-          if [[ "$QUOTA" -eq 1 ]]; then MIN_AGE=$((25*3600)); else MIN_AGE=$((30*60)); fi
-          if (( AGE < MIN_AGE )); then
-            echo "Cooling down: age=${AGE}s required=${MIN_AGE}s"
-            exit 0
-          fi
-
-          if [[ "$QUOTA" -eq 0 ]]; then
-            SIX_HOURS_AGO=$((NOW-6*3600))
-            SAME=0
-            while read -r RID RSTATUS RCONC RUPDATED; do
-              [[ "$RSTATUS" == "completed" && ( "$RCONC" == "failure" || "$RCONC" == "timed_out" ) ]] || continue
-              TS=$(date -u -d "$RUPDATED" +%s)
-              (( TS >= SIX_HOURS_AGO )) || continue
-              RJOBS=$(gh api "/repos/$REPO/actions/runs/$RID/jobs?per_page=100" 2>/dev/null || echo '{"jobs":[]}')
-              RNAME=$(jq -r '[.jobs[] | select(.conclusion=="failure" or .conclusion=="timed_out")][0].name // empty' <<<"$RJOBS")
-              RBATCH=$(sed -nE 's/.*curate \(([0-9]+).*/\1/p' <<<"$RNAME")
-              [[ "$RBATCH" == "$BATCH" ]] && SAME=$((SAME+1))
-            done < <(jq -r '.workflow_runs[] | [.id,.status,(.conclusion//""),.updated_at] | @tsv' <<<"$RUN_JSON")
-            if (( SAME >= 3 )); then
-              echo "Batch $BATCH failed $SAME times in six hours; stopping automatic retries."
-              exit 0
-            fi
-          fi
-
-          echo "Dispatching OpenAlex Research Curation from batch $BATCH"
-          gh workflow run openalex-curate.yml --repo "$REPO" -f start_batch="$BATCH"
+          echo "Base run completed without an identifiable incomplete curation batch; not guessing."
