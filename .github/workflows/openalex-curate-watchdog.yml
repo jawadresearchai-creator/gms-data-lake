@@ -26,52 +26,43 @@ jobs:
 
           RUNS=$(gh api "/repos/$REPO/actions/workflows/openalex-curate.yml/runs?per_page=20")
           LATEST_ID=$(jq -r '.workflow_runs[0].id // empty' <<<"$RUNS")
-          LATEST_STATUS=$(jq -r '.workflow_runs[0].status // empty' <<<"$RUNS")
-          LATEST_CONCLUSION=$(jq -r '.workflow_runs[0].conclusion // empty' <<<"$RUNS")
-          LATEST_EVENT=$(jq -r '.workflow_runs[0].event // empty' <<<"$RUNS")
-          LATEST_UPDATED=$(jq -r '.workflow_runs[0].updated_at // empty' <<<"$RUNS")
-
           [[ -n "$LATEST_ID" ]] || { echo "No curation run exists yet."; exit 0; }
-          echo "Latest curation: id=$LATEST_ID status=$LATEST_STATUS conclusion=$LATEST_CONCLUSION event=$LATEST_EVENT updated=$LATEST_UPDATED"
 
-          # If a recovery run is already queued/running, never create another one.
           ACTIVE_RECOVERY=$(jq -r '[.workflow_runs[] | select(.event=="workflow_dispatch" and (.status=="queued" or .status=="in_progress" or .status=="waiting" or .status=="pending"))][0].id // empty' <<<"$RUNS")
           if [[ -n "$ACTIVE_RECOVERY" ]]; then
             echo "Recovery run $ACTIVE_RECOVERY is already active/queued; watchdog is idle."
             exit 0
           fi
 
-          # Inspect the newest non-recovery run, even while its matrix is still active.
           BASE_ID=$(jq -r '[.workflow_runs[] | select(.event!="workflow_dispatch")][0].id // empty' <<<"$RUNS")
-          if [[ -z "$BASE_ID" ]]; then
-            BASE_ID="$LATEST_ID"
-          fi
+          [[ -n "$BASE_ID" ]] || BASE_ID="$LATEST_ID"
           BASE_STATUS=$(jq -r --argjson id "$BASE_ID" '.workflow_runs[] | select(.id==$id) | .status' <<<"$RUNS")
           BASE_CONCLUSION=$(jq -r --argjson id "$BASE_ID" '.workflow_runs[] | select(.id==$id) | (.conclusion // "")' <<<"$RUNS")
           echo "Base curation run: id=$BASE_ID status=$BASE_STATUS conclusion=$BASE_CONCLUSION"
 
           JOBS=$(gh api --paginate "/repos/$REPO/actions/runs/$BASE_ID/jobs?per_page=100")
 
-          # A cancelled curation step is the expected signature of our 350-minute timeout.
-          INCOMPLETE_NAME=$(jq -r '[.jobs[] | select(.conclusion=="cancelled" or .conclusion=="failure" or .conclusion=="timed_out") | select(.name|startswith("curate ("))][0].name // empty' <<<"$JOBS")
-
-          if [[ -n "$INCOMPLETE_NAME" ]]; then
-            BATCH=$(sed -nE 's/.*curate \(([0-9]+).*/\1/p' <<<"$INCOMPLETE_NAME")
-            [[ -n "$BATCH" ]] || { echo "Cannot parse batch from: $INCOMPLETE_NAME"; exit 1; }
-            echo "Detected incomplete batch $BATCH: $INCOMPLETE_NAME"
-
-            # If any other workflow-dispatch run already exists after this base run,
-            # assume recovery has already been requested and avoid duplicates.
-            BASE_CREATED=$(jq -r --argjson id "$BASE_ID" '.workflow_runs[] | select(.id==$id) | .created_at' <<<"$RUNS")
-            ALREADY_REQUESTED=$(jq -r --arg t "$BASE_CREATED" '[.workflow_runs[] | select(.event=="workflow_dispatch" and .created_at > $t)][0].id // empty' <<<"$RUNS")
-            if [[ -n "$ALREADY_REQUESTED" ]]; then
-              echo "Recovery was already requested as run $ALREADY_REQUESTED; watchdog is idle."
-              exit 0
+          # Always choose the numerically earliest incomplete batch, regardless of
+          # GitHub API job ordering.
+          INCOMPLETE_BATCH=""
+          while IFS= read -r name; do
+            batch=$(sed -nE 's/.*curate \(([0-9]+).*/\1/p' <<<"$name")
+            [[ -n "$batch" ]] || continue
+            if [[ -z "$INCOMPLETE_BATCH" || "$batch" -lt "$INCOMPLETE_BATCH" ]]; then
+              INCOMPLETE_BATCH="$batch"
             fi
+          done < <(
+            jq -r '.jobs[]
+              | select(.conclusion=="cancelled" or .conclusion=="failure" or .conclusion=="timed_out")
+              | select(.name|startswith("curate ("))
+              | .name' <<<"$JOBS"
+          )
 
-            echo "Queueing state-aware recovery from batch $BATCH."
-            echo "The recovery uses the same deterministic 500-object ranges; the Drive state DB skips already completed objects."
-            gh workflow run openalex-curate.yml --repo "$REPO" -f start_batch="$BATCH"
+          if [[ -n "$INCOMPLETE_BATCH" ]]; then
+            echo "Detected earliest incomplete batch: $INCOMPLETE_BATCH"
+            echo "Queueing state-aware recovery from batch $INCOMPLETE_BATCH."
+            echo "The same deterministic 500-object range is reused; the Drive checkpoint DB skips objects already completed."
+            gh workflow run openalex-curate.yml --repo "$REPO" -f start_batch="$INCOMPLETE_BATCH"
             exit 0
           fi
 
