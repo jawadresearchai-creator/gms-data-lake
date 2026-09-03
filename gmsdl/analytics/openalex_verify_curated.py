@@ -40,10 +40,12 @@ def _entity_from_dataset_id(dataset_id: str) -> str | None:
 
 def summarize(raw_manifest: Path, state_dir: Path) -> dict[str, int]:
     raw = sqlite3.connect(raw_manifest)
+    cols = {str(r[1]) for r in raw.execute("PRAGMA table_info(files)").fetchall()}
+    key_col = "dataset_id" if "dataset_id" in cols else "key"
     raw_rows = raw.execute(
-        "SELECT dataset_id, COALESCE(bytes,0) FROM files "
+        f"SELECT {key_col}, COALESCE(bytes,0) FROM files "
         "WHERE source_id='OPENALEX_SNAPSHOT' AND status='OK' "
-        "AND dataset_id LIKE 'data/parquet/%.parquet'"
+        f"AND {key_col} LIKE 'data/parquet/%.parquet'"
     ).fetchall()
     raw.close()
 
@@ -111,13 +113,13 @@ def validate(summary: dict[str, int]) -> list[str]:
     if summary["state_failed"] != 0:
         errors.append("failed curation records exist")
     if summary["missing_keys"] != 0:
-        errors.append("supported raw Parquet source keys are missing from curation state")
+        errors.append("curated source-key count does not match raw OpenAlex count")
     if summary["unexpected_keys"] != 0:
         errors.append("curation state contains keys outside the supported raw Parquet set")
     if summary["state_ok"] != summary["raw_count"]:
-        errors.append("curated source-key count does not match supported raw Parquet count")
+        errors.append("curated source-key count does not match raw OpenAlex count")
     if summary["state_bytes_in"] != summary["raw_bytes"]:
-        errors.append("curated input bytes do not match supported verified raw Parquet bytes")
+        errors.append("curated input bytes do not match verified raw bytes")
     if summary["state_bytes_out"] <= 0:
         errors.append("curated output bytes are zero")
     return errors

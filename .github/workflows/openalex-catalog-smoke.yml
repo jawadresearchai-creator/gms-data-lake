@@ -30,7 +30,7 @@ jobs:
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
 
-      - name: Stage representative curated shards and build DuckDB catalog
+      - name: Stage representative curated shards and build DuckDB research catalog
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -44,6 +44,7 @@ jobs:
           mkdir -p staged catalog
           tables=(WORK_MASTER AUTHOR_MASTER INSTITUTION_MASTER SOURCE_MASTER TOPIC_MASTER CITATION_EDGES WORK_AUTHOR_EDGES AUTHOR_INSTITUTION_EDGES WORK_TOPIC_EDGES COUNTRY_COLLAB_EDGES)
           staged=0
+          require_args=()
           for table in "${tables[@]}"; do
             remote="gdrive:02_CURATED/openalex/v1/$table"
             first=$(rclone lsf "$remote" --files-only --recursive 2>/dev/null | grep -E '\.parquet$' | head -1 || true)
@@ -55,13 +56,31 @@ jobs:
             rclone copyto "$remote/$first" "staged/$table/$first" --stats 0
             echo "Staged $table/$first"
             staged=$((staged+1))
+            require_args+=(--require-table "$table")
           done
           (( staged >= 5 )) || { echo "ERROR: too few curated tables were available for catalog smoke test" >&2; exit 1; }
 
           python -m gmsdl.analytics.openalex_catalog \
             --root staged \
             --db catalog/openalex-smoke.duckdb \
-            --metadata catalog/catalog-smoke.json
+            --metadata catalog/catalog-smoke.json \
+            "${require_args[@]}"
+
+          python -m gmsdl.analytics.openalex_query \
+            --db catalog/openalex-smoke.duckdb \
+            --sql "SELECT * FROM oa.table_counts ORDER BY table_kind, table_name" \
+            --output catalog/table-counts.parquet \
+            --metadata catalog/query-smoke.json
+
+          python - <<'PY'
+          import duckdb
+          con = duckdb.connect('catalog/openalex-smoke.duckdb', read_only=True)
+          assert con.execute("SELECT COUNT(*) FROM oa.catalog").fetchone()[0] >= 5
+          assert con.execute("SELECT COUNT(*) FROM gms_meta.columns").fetchone()[0] > 0
+          funcs = {r[0] for r in con.execute("SELECT function_name FROM duckdb_functions() WHERE schema_name='oa'").fetchall()}
+          assert {'work','author','institution','topic'} <= funcs
+          con.close()
+          PY
 
           rclone copy catalog \
             gdrive:03_RESEARCH/openalex/v1/catalog/smoke \
