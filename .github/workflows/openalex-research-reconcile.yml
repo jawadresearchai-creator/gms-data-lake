@@ -1,0 +1,97 @@
+name: Reconcile OpenAlex Research Edge Shards
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Delete edge shards that have no matching WORK_MASTER shard"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Reconcile derived edge shard paths
+        env:
+          APPLY: ${{ inputs.apply }}
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="gdrive:02_CURATED/openalex/v1"
+          edges=(CITATION_EDGES WORK_TOPIC_EDGES WORK_AUTHOR_EDGES AUTHOR_INSTITUTION_EDGES COUNTRY_COLLAB_EDGES)
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+
+          rclone lsf "$base/WORK_MASTER" --files-only --recursive 2>/dev/null \
+            | grep -E '\.parquet$' | sort > "$tmp/work.txt"
+          (( $(wc -l < "$tmp/work.txt") > 0 )) || {
+            echo "ERROR: WORK_MASTER listing is empty" >&2
+            exit 1
+          }
+
+          missing_any=0
+          extra_any=0
+          for table in "${edges[@]}"; do
+            rclone lsf "$base/$table" --files-only --recursive 2>/dev/null \
+              | grep -E '\.parquet$' | sort > "$tmp/$table.txt"
+            comm -13 "$tmp/work.txt" "$tmp/$table.txt" > "$tmp/$table.extra"
+            comm -23 "$tmp/work.txt" "$tmp/$table.txt" > "$tmp/$table.missing"
+
+            if [[ -s "$tmp/$table.missing" ]]; then
+              missing_any=1
+              echo "MISSING $table"
+              cat "$tmp/$table.missing"
+            fi
+            if [[ -s "$tmp/$table.extra" ]]; then
+              extra_any=1
+              echo "EXTRA $table"
+              cat "$tmp/$table.extra"
+              if [[ "$APPLY" == "true" ]]; then
+                while IFS= read -r rel; do
+                  [[ -n "$rel" ]] || continue
+                  echo "Deleting derived orphan: $table/$rel"
+                  rclone deletefile "$base/$table/$rel"
+                done < "$tmp/$table.extra"
+              fi
+            fi
+          done
+
+          if (( missing_any != 0 )); then
+            echo "ERROR: missing edge shards exist; refusing automatic repair because they require source-aware regeneration." >&2
+            exit 1
+          fi
+          if (( extra_any != 0 )) && [[ "$APPLY" != "true" ]]; then
+            echo "Dry run found orphan edge shards. Re-run with apply=true to delete only those derived orphans." >&2
+            exit 2
+          fi
+
+          if [[ "$APPLY" == "true" ]]; then
+            echo "Rechecking after cleanup..."
+            for table in "${edges[@]}"; do
+              rclone lsf "$base/$table" --files-only --recursive 2>/dev/null \
+                | grep -E '\.parquet$' | sort > "$tmp/$table.after"
+              if ! cmp -s "$tmp/work.txt" "$tmp/$table.after"; then
+                echo "ERROR: $table still does not exactly match WORK_MASTER after cleanup" >&2
+                exit 1
+              fi
+            done
+          fi
+
+          echo "OpenAlex research edge shard paths are reconciled."
