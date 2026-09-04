@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: gmsdl-geo-public-omics-analysis
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
       - name: Install R/Bioconductor and rclone
         run: |
           sudo apt-get update
-          sudo apt-get install -y r-base r-bioc-limma r-bioc-edger r-cran-readxl
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends r-base-core r-bioc-limma r-bioc-edger r-cran-readxl
           curl -fsSL https://rclone.org/install.sh | sudo bash
           Rscript -e 'library(limma); library(edgeR); library(readxl); sessionInfo()'
           rclone version
