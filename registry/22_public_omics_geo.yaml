@@ -1,0 +1,96 @@
+domain: "22_PUBLIC_OMICS_GEO"
+sources:
+  - id: GEO_GSE33505
+    name: Arabidopsis HIPV receiver microarray (GSE33505)
+    subdomain: arabidopsis_expression
+    kind: static
+    cadence: on_demand
+    tier: core
+    homepage: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE33505
+    license: NCBI GEO public repository; original study/data terms apply
+    rate_limit_per_sec: 1
+    notes: >
+      Required public gene-expression evidence for the current acetophenone/VOC study.
+      Use the processed series matrix, not the 31.5 MB CEL/CHP archive, for the first-pass
+      gene-level analysis. GPL198 full text is included for probe-to-gene mapping.
+    datasets:
+      - id: gse33505_series_matrix
+        url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE33nnn/GSE33505/matrix/GSE33505_series_matrix.txt.gz
+        filename: GSE33505_series_matrix.txt.gz
+        max_bytes: 52428800
+      - id: gpl198_annotation
+        url: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL198&targ=self&view=full&form=text
+        filename: GPL198_full.txt
+        max_bytes: 52428800
+
+  - id: GEO_GSE90077
+    name: Arabidopsis MeJA time-course RNA-seq (GSE90077)
+    subdomain: arabidopsis_expression
+    kind: static
+    cadence: on_demand
+    tier: core
+    homepage: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE90077
+    license: NCBI GEO public repository; original study/data terms apply
+    rate_limit_per_sec: 1
+    notes: >
+      Required JA reference dataset. Downstream analysis will retain MeJA and matched mock
+      samples at 1 h, 5 h and 8 h and exclude BTH samples.
+    datasets:
+      - id: gse90077_counts
+        url: https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE90077&file=GSE90077_JBM_counts.txt.gz&format=file
+        filename: GSE90077_JBM_counts.txt.gz
+        max_bytes: 10485760
+      - id: gse90077_series_matrix
+        url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE90nnn/GSE90077/matrix/GSE90077_series_matrix.txt.gz
+        filename: GSE90077_series_matrix.txt.gz
+        max_bytes: 52428800
+
+  - id: GEO_GSE163270
+    name: Arabidopsis long-lasting JA priming RNA-seq (GSE163270)
+    subdomain: arabidopsis_expression
+    kind: static
+    cadence: on_demand
+    tier: core
+    homepage: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE163270
+    license: NCBI GEO public repository; original study/data terms apply
+    rate_limit_per_sec: 1
+    notes: >
+      Required priming/memory dataset. Retain all 16 processed samples because the
+      W_W, W_JA, JA_W and JA_JA groups are all required for the interaction analysis.
+    datasets:
+      - id: gse163270_processed_tar
+        url: https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE163270&format=file
+        filename: GSE163270_RAW.tar
+        max_bytes: 52428800
+      - id: gse163270_series_matrix
+        url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE163nnn/GSE163270/matrix/GSE163270_series_matrix.txt.gz
+        filename: GSE163270_series_matrix.txt.gz
+        max_bytes: 52428800
+
+  - id: GEO_GSE180220
+    name: Arabidopsis aerial borneol VOC microarray (GSE180220)
+    subdomain: arabidopsis_expression
+    kind: static
+    cadence: on_demand
+    tier: core
+    homepage: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE180220
+    license: NCBI GEO public repository; original study/data terms apply
+    rate_limit_per_sec: 1
+    notes: >
+      Independent single-VOC transcriptome. First-pass downstream analysis will compare
+      (+)-borneol against mock; the (-)-borneol arm is retained in the downloaded workbook
+      but is not part of the initial targeted contrast. GPL9020 full text is included for
+      feature-to-gene mapping.
+    datasets:
+      - id: gse180220_normalized
+        url: https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE180220&file=GSE180220_Normalized_processed_data.xlsx&format=file
+        filename: GSE180220_Normalized_processed_data.xlsx
+        max_bytes: 52428800
+      - id: gse180220_series_matrix
+        url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE180nnn/GSE180220/matrix/GSE180220_series_matrix.txt.gz
+        filename: GSE180220_series_matrix.txt.gz
+        max_bytes: 52428800
+      - id: gpl9020_annotation
+        url: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL9020&targ=self&view=full&form=text
+        filename: GPL9020_full.txt
+        max_bytes: 52428800
