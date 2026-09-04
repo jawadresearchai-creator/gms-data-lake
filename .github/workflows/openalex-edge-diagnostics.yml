@@ -1,0 +1,67 @@
+name: Diagnose OpenAlex Edge Quality
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-analytics.txt
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+      - name: Diagnose representative edge shards
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="gdrive:02_CURATED/openalex/v1"
+          mkdir -p staged
+          for table in WORK_AUTHOR_EDGES WORK_TOPIC_EDGES AUTHOR_INSTITUTION_EDGES CITATION_EDGES; do
+            first=$(rclone lsf "$base/$table" --files-only --recursive | grep -E '\.parquet$' | head -1 || true)
+            [[ -n "$first" ]] || exit 1
+            mkdir -p "staged/$table/$(dirname "$first")"
+            rclone copyto "$base/$table/$first" "staged/$table/$first" --stats 0
+          done
+          python - <<'PY'
+          import duckdb, json
+          from pathlib import Path
+          con=duckdb.connect()
+          specs={
+            'WORK_AUTHOR_EDGES':['work_id','author_id'],
+            'WORK_TOPIC_EDGES':['work_id','topic_id'],
+            'AUTHOR_INSTITUTION_EDGES':['work_id','author_id','institution_id'],
+            'CITATION_EDGES':['work_id','referenced_work_id'],
+          }
+          out={}
+          for table, keys in specs.items():
+            glob=(Path('staged')/table/'**'/'*.parquet').as_posix()
+            rel=f"read_parquet('{glob}', union_by_name=true, hive_partitioning=true)"
+            where=' AND '.join(f'{k} IS NOT NULL' for k in keys)
+            null_pred=' OR '.join(f'{k} IS NULL' for k in keys)
+            key_sql=','.join(keys)
+            total=con.execute(f'SELECT COUNT(*) FROM {rel}').fetchone()[0]
+            nulls=con.execute(f'SELECT COUNT(*) FROM {rel} WHERE {null_pred}').fetchone()[0]
+            dups=con.execute(f'''SELECT COALESCE(SUM(n-1),0) FROM (
+              SELECT COUNT(*) n FROM {rel} WHERE {where}
+              GROUP BY {key_sql} HAVING COUNT(*)>1
+            )''').fetchone()[0]
+            out[table]={'rows':total,'null_endpoint_rows':nulls,'duplicate_non_null_key_rows':dups}
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
