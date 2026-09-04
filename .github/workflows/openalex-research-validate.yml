@@ -2,7 +2,7 @@ name: Validate OpenAlex Research Layer
 
 on:
   workflow_run:
-    workflows: ["OpenAlex Catalog Smoke Test"]
+    workflows: ["OpenAlex Catalog Smoke Test", "Clean OpenAlex Research Edges"]
     types: [completed]
   workflow_dispatch:
 

@@ -78,7 +78,7 @@ jobs:
           assert con.execute("SELECT COUNT(*) FROM oa.catalog").fetchone()[0] >= 5
           assert con.execute("SELECT COUNT(*) FROM gms_meta.columns").fetchone()[0] > 0
           funcs = {r[0] for r in con.execute("SELECT function_name FROM duckdb_functions() WHERE schema_name='oa'").fetchall()}
-          assert {'work','author','institution','topic'} <= funcs
+          assert {'work','author','institution','topic','author_works','coauthors','institution_works','country_collaborations'} <= funcs
           con.close()
           PY
 
