@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/geo-omics-analysis.yml"
       - "analysis/geo_target_panel_reanalysis.R"
+      - "analysis/run_geo_target_panel_reanalysis.R"
 
 concurrency:
   group: gmsdl-geo-public-omics-analysis
@@ -49,7 +50,7 @@ jobs:
 
       - name: Run standard transcriptomics reanalysis
         run: |
-          Rscript analysis/geo_target_panel_reanalysis.R geo_data geo_results
+          Rscript analysis/run_geo_target_panel_reanalysis.R geo_data geo_results
           echo "--- combined results ---"
           cat geo_results/public_omics_target_panel_bioconductor.csv
 
