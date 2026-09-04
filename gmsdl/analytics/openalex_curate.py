@@ -221,10 +221,13 @@ def materialize_work_edges(raw_path: Path, out_dir: Path, source_key: str) -> di
     outputs: dict[str, Path] = {}
     queries = {
         "CITATION_EDGES": f"""
-            SELECT id AS work_id, unnest(referenced_works) AS referenced_work_id,
-                   {source_sql} AS _source_key
-            FROM read_parquet({raw_sql})
-            WHERE referenced_works IS NOT NULL
+            SELECT DISTINCT work_id, referenced_work_id, {source_sql} AS _source_key
+            FROM (
+                SELECT id AS work_id, unnest(referenced_works) AS referenced_work_id
+                FROM read_parquet({raw_sql})
+                WHERE referenced_works IS NOT NULL AND id IS NOT NULL
+            )
+            WHERE referenced_work_id IS NOT NULL
         """,
         "WORK_TOPIC_EDGES": f"""
             SELECT w.id AS work_id, t.topic.id AS topic_id,
@@ -232,6 +235,11 @@ def materialize_work_edges(raw_path: Path, out_dir: Path, source_key: str) -> di
                    {source_sql} AS _source_key
             FROM read_parquet({raw_sql}) AS w,
                  UNNEST(w.topics) AS t(topic)
+            WHERE w.id IS NOT NULL AND t.topic.id IS NOT NULL
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY w.id, t.topic.id
+                ORDER BY t.topic.score DESC NULLS LAST, t.topic.display_name NULLS LAST
+            ) = 1
         """,
         "WORK_AUTHOR_EDGES": f"""
             SELECT w.id AS work_id, a.authorship.author.id AS author_id,
@@ -240,6 +248,15 @@ def materialize_work_edges(raw_path: Path, out_dir: Path, source_key: str) -> di
                    {source_sql} AS _source_key
             FROM read_parquet({raw_sql}) AS w,
                  UNNEST(w.authorships) AS a(authorship)
+            WHERE w.id IS NOT NULL AND a.authorship.author.id IS NOT NULL
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY w.id, a.authorship.author.id
+                ORDER BY COALESCE(a.authorship.is_corresponding, FALSE) DESC,
+                         CASE a.authorship.author_position
+                           WHEN 'first' THEN 1 WHEN 'last' THEN 2 WHEN 'middle' THEN 3 ELSE 4
+                         END,
+                         a.authorship.author_position NULLS LAST
+            ) = 1
         """,
         "AUTHOR_INSTITUTION_EDGES": f"""
             SELECT w.id AS work_id, a.authorship.author.id AS author_id,
@@ -251,6 +268,15 @@ def materialize_work_edges(raw_path: Path, out_dir: Path, source_key: str) -> di
             FROM read_parquet({raw_sql}) AS w,
                  UNNEST(w.authorships) AS a(authorship),
                  UNNEST(a.authorship.institutions) AS i(institution)
+            WHERE w.id IS NOT NULL
+              AND a.authorship.author.id IS NOT NULL
+              AND i.institution.id IS NOT NULL
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY w.id, a.authorship.author.id, i.institution.id
+                ORDER BY COALESCE(a.authorship.is_corresponding, FALSE) DESC,
+                         i.institution.country_code NULLS LAST,
+                         a.authorship.author_position NULLS LAST
+            ) = 1
         """,
         "COUNTRY_COLLAB_EDGES": f"""
             WITH work_country AS (
@@ -258,9 +284,9 @@ def materialize_work_edges(raw_path: Path, out_dir: Path, source_key: str) -> di
                 FROM read_parquet({raw_sql}) AS w,
                      UNNEST(w.authorships) AS a(authorship),
                      UNNEST(a.authorship.countries) AS c(country)
-                WHERE c.country IS NOT NULL AND c.country <> ''
+                WHERE w.id IS NOT NULL AND c.country IS NOT NULL AND c.country <> ''
             )
-            SELECT a.work_id, a.country_code AS country_a, b.country_code AS country_b,
+            SELECT DISTINCT a.work_id, a.country_code AS country_a, b.country_code AS country_b,
                    {source_sql} AS _source_key
             FROM work_country a
             JOIN work_country b ON a.work_id = b.work_id AND a.country_code < b.country_code

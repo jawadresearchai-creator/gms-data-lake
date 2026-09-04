@@ -63,18 +63,26 @@ def validate_staged(root: Path, tables: list[str] | None = None) -> dict:
             row_count = int(con.execute(f"SELECT COUNT(*) FROM {relation}").fetchone()[0])
             null_source = int(con.execute(f"SELECT COUNT(*) FROM {relation} WHERE _source_key IS NULL OR _source_key='' ").fetchone()[0]) if "_source_key" in cols else row_count
             duplicate_rows = 0
+            invalid_key_rows = 0
             key_cols = UNIQUE_KEYS.get(table)
             if key_cols and set(key_cols) <= cols and row_count:
                 keys = ",".join(key_cols)
+                invalid_pred = " OR ".join(f"{k} IS NULL OR CAST({k} AS VARCHAR)=''" for k in key_cols)
+                valid_pred = " AND ".join(f"{k} IS NOT NULL AND CAST({k} AS VARCHAR)<>''" for k in key_cols)
+                invalid_key_rows = int(
+                    con.execute(f"SELECT COUNT(*) FROM {relation} WHERE {invalid_pred}").fetchone()[0]
+                )
                 duplicate_rows = int(
                     con.execute(
-                        f"SELECT COALESCE(SUM(n-1),0) FROM (SELECT COUNT(*) n FROM {relation} GROUP BY {keys} HAVING COUNT(*)>1)"
+                        f"SELECT COALESCE(SUM(n-1),0) FROM (SELECT COUNT(*) n FROM {relation} WHERE {valid_pred} GROUP BY {keys} HAVING COUNT(*)>1)"
                     ).fetchone()[0]
                 )
             if missing:
                 errors.append(f"{table}: missing columns {', '.join(missing)}")
             if null_source:
                 errors.append(f"{table}: {null_source} rows have missing _source_key")
+            if invalid_key_rows:
+                errors.append(f"{table}: {invalid_key_rows} rows have null/empty edge endpoints")
             if duplicate_rows:
                 errors.append(f"{table}: {duplicate_rows} duplicate research-edge rows")
             results.append(
@@ -85,6 +93,7 @@ def validate_staged(root: Path, tables: list[str] | None = None) -> dict:
                     "columns": sorted(cols),
                     "missing_required_columns": missing,
                     "null_source_rows": null_source,
+                    "invalid_key_rows": invalid_key_rows,
                     "duplicate_rows": duplicate_rows,
                 }
             )

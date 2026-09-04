@@ -24,15 +24,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          VERIFY_RUNS=$(gh api "/repos/$REPO/actions/workflows/openalex-curated-verify.yml/runs?per_page=20")
-          VERIFIED_CURRENT=$(jq -r --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .conclusion=="success")][0].id // empty' <<<"$VERIFY_RUNS")
-          if [[ -n "$VERIFIED_CURRENT" ]]; then
-            echo "Current commit already has successful curated-layer verification run $VERIFIED_CURRENT; curation is terminal and watchdog is idle."
-            exit 0
-          fi
-
           RUNS=$(gh api "/repos/$REPO/actions/workflows/openalex-curate.yml/runs?per_page=20")
           LATEST_ID=$(jq -r '.workflow_runs[0].id // empty' <<<"$RUNS")
+          LATEST_UPDATED=$(jq -r '.workflow_runs[0].updated_at // empty' <<<"$RUNS")
+
+          VERIFY_RUNS=$(gh api "/repos/$REPO/actions/workflows/openalex-curated-verify.yml/runs?per_page=20")
+          VERIFIED_AFTER=$(jq -r --arg cutoff "$LATEST_UPDATED" '[.workflow_runs[] | select(.conclusion=="success" and .updated_at > $cutoff)][0].id // empty' <<<"$VERIFY_RUNS")
+          if [[ -n "$VERIFIED_AFTER" ]]; then
+            echo "Curated-layer verification run $VERIFIED_AFTER is newer than the latest curation run; curation is terminal and watchdog is idle."
+            exit 0
+          fi
           [[ -n "$LATEST_ID" ]] || { echo "No curation run exists yet."; exit 0; }
 
           ACTIVE_RECOVERY=$(jq -r '[.workflow_runs[] | select(.event=="workflow_dispatch" and (.status=="queued" or .status=="in_progress" or .status=="waiting" or .status=="pending"))][0].id // empty' <<<"$RUNS")
