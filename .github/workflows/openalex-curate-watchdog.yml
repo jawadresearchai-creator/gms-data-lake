@@ -24,6 +24,13 @@ jobs:
         run: |
           set -euo pipefail
 
+          VERIFY_RUNS=$(gh api "/repos/$REPO/actions/workflows/openalex-curated-verify.yml/runs?per_page=20")
+          VERIFIED_CURRENT=$(jq -r --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .conclusion=="success")][0].id // empty' <<<"$VERIFY_RUNS")
+          if [[ -n "$VERIFIED_CURRENT" ]]; then
+            echo "Current commit already has successful curated-layer verification run $VERIFIED_CURRENT; curation is terminal and watchdog is idle."
+            exit 0
+          fi
+
           RUNS=$(gh api "/repos/$REPO/actions/workflows/openalex-curate.yml/runs?per_page=20")
           LATEST_ID=$(jq -r '.workflow_runs[0].id // empty' <<<"$RUNS")
           [[ -n "$LATEST_ID" ]] || { echo "No curation run exists yet."; exit 0; }

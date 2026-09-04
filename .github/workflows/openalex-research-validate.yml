@@ -1,0 +1,90 @@
+name: Validate OpenAlex Research Layer
+
+on:
+  workflow_run:
+    workflows: ["OpenAlex Catalog Smoke Test"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Validate research shard completeness and contracts
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="gdrive:02_CURATED/openalex/v1"
+          mkdir -p staged validation
+
+          tables=(WORK_MASTER AUTHOR_MASTER INSTITUTION_MASTER SOURCE_MASTER TOPIC_MASTER CITATION_EDGES WORK_TOPIC_EDGES WORK_AUTHOR_EDGES AUTHOR_INSTITUTION_EDGES COUNTRY_COLLAB_EDGES)
+          edges=(CITATION_EDGES WORK_TOPIC_EDGES WORK_AUTHOR_EDGES AUTHOR_INSTITUTION_EDGES COUNTRY_COLLAB_EDGES)
+
+          count_table() {
+            rclone lsf "$base/$1" --files-only --recursive 2>/dev/null | grep -Ec '\.parquet$' || true
+          }
+
+          work_shards=$(count_table WORK_MASTER)
+          (( work_shards > 0 )) || { echo "ERROR: WORK_MASTER has no Parquet shards" >&2; exit 1; }
+          echo "WORK_MASTER shards=$work_shards"
+
+          for table in "${edges[@]}"; do
+            n=$(count_table "$table")
+            echo "$table shards=$n"
+            [[ "$n" -eq "$work_shards" ]] || {
+              echo "ERROR: $table shard count $n does not match WORK_MASTER $work_shards" >&2
+              exit 1
+            }
+          done
+
+          for table in "${tables[@]}"; do
+            remote="$base/$table"
+            first=$(rclone lsf "$remote" --files-only --recursive 2>/dev/null | grep -E '\.parquet$' | head -1 || true)
+            [[ -n "$first" ]] || { echo "ERROR: no Parquet shard found for $table" >&2; exit 1; }
+            mkdir -p "staged/$table/$(dirname "$first")"
+            rclone copyto "$remote/$first" "staged/$table/$first" --stats 0
+          done
+
+          python -m gmsdl.analytics.openalex_research_validate \
+            --root staged \
+            --output validation/openalex-research-validation.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('validation/openalex-research-validation.json')
+          d=json.loads(p.read_text())
+          assert d['verified'] is True
+          assert len(d['tables']) == 10
+          PY
+
+          rclone copy validation \
+            gdrive:03_RESEARCH/openalex/v1/validation \
+            --stats 0
