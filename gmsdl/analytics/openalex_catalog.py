@@ -113,6 +113,50 @@ def _create_join_macros(con: duckdb.DuckDBPyConnection, tables: set[str]) -> lis
             )
             created.append("work_authors")
 
+    if {"WORK_AUTHOR_EDGES", "WORK_MASTER"} <= tables:
+        edge_cols = set(_column_names(con, f'{sql_ident(DATA_SCHEMA)}."WORK_AUTHOR_EDGES"'))
+        work_cols = set(_column_names(con, f'{sql_ident(DATA_SCHEMA)}."WORK_MASTER"'))
+        if {"work_id", "author_id"} <= edge_cols and "id" in work_cols:
+            con.execute(
+                f"CREATE OR REPLACE MACRO {sql_ident(DATA_SCHEMA)}.author_works(target_author_id) AS TABLE "
+                f"SELECT e.*, w.* EXCLUDE (id) FROM {sql_ident(DATA_SCHEMA)}.\"WORK_AUTHOR_EDGES\" e "
+                f"LEFT JOIN {sql_ident(DATA_SCHEMA)}.\"WORK_MASTER\" w ON w.id=e.work_id "
+                f"WHERE e.author_id=target_author_id"
+            )
+            con.execute(
+                f"CREATE OR REPLACE MACRO {sql_ident(DATA_SCHEMA)}.coauthors(target_author_id) AS TABLE "
+                f"SELECT b.author_id AS coauthor_id, COUNT(DISTINCT a.work_id) AS shared_work_count "
+                f"FROM {sql_ident(DATA_SCHEMA)}.\"WORK_AUTHOR_EDGES\" a "
+                f"JOIN {sql_ident(DATA_SCHEMA)}.\"WORK_AUTHOR_EDGES\" b ON a.work_id=b.work_id "
+                f"WHERE a.author_id=target_author_id AND b.author_id<>target_author_id "
+                f"GROUP BY b.author_id ORDER BY shared_work_count DESC, coauthor_id"
+            )
+            created.extend(["author_works", "coauthors"])
+
+    if {"AUTHOR_INSTITUTION_EDGES", "WORK_MASTER"} <= tables:
+        edge_cols = set(_column_names(con, f'{sql_ident(DATA_SCHEMA)}."AUTHOR_INSTITUTION_EDGES"'))
+        work_cols = set(_column_names(con, f'{sql_ident(DATA_SCHEMA)}."WORK_MASTER"'))
+        if {"work_id", "institution_id"} <= edge_cols and "id" in work_cols:
+            con.execute(
+                f"CREATE OR REPLACE MACRO {sql_ident(DATA_SCHEMA)}.institution_works(target_institution_id) AS TABLE "
+                f"SELECT e.*, w.* EXCLUDE (id) FROM {sql_ident(DATA_SCHEMA)}.\"AUTHOR_INSTITUTION_EDGES\" e "
+                f"LEFT JOIN {sql_ident(DATA_SCHEMA)}.\"WORK_MASTER\" w ON w.id=e.work_id "
+                f"WHERE e.institution_id=target_institution_id"
+            )
+            created.append("institution_works")
+
+    if "COUNTRY_COLLAB_EDGES" in tables:
+        cols = set(_column_names(con, f'{sql_ident(DATA_SCHEMA)}."COUNTRY_COLLAB_EDGES"'))
+        if {"country_a", "country_b", "work_id"} <= cols:
+            con.execute(
+                f"CREATE OR REPLACE MACRO {sql_ident(DATA_SCHEMA)}.country_collaborations(target_country_code) AS TABLE "
+                f"SELECT work_id, country_a, country_b, "
+                f"CASE WHEN country_a=target_country_code THEN country_b ELSE country_a END AS partner_country, _source_key "
+                f"FROM {sql_ident(DATA_SCHEMA)}.\"COUNTRY_COLLAB_EDGES\" "
+                f"WHERE country_a=target_country_code OR country_b=target_country_code"
+            )
+            created.append("country_collaborations")
+
     if "CITATION_EDGES" in tables:
         cols = set(_column_names(con, f'{sql_ident(DATA_SCHEMA)}."CITATION_EDGES"'))
         if {"work_id", "referenced_work_id"} <= cols:

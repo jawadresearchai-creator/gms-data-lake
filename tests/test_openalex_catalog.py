@@ -42,19 +42,29 @@ def test_build_catalog_over_staged_tables(tmp_path: Path) -> None:
 
 def test_research_join_macros(tmp_path: Path) -> None:
     root = tmp_path / "curated"
-    _write_parquet(root / "AUTHOR_MASTER" / "a.parquet", "id VARCHAR, display_name VARCHAR", [("A1", "Ada")])
+    _write_parquet(root / "WORK_MASTER" / "w.parquet", "id VARCHAR, title VARCHAR", [("W1", "Paper 1"), ("W2", "Paper 2")])
+    _write_parquet(root / "AUTHOR_MASTER" / "a.parquet", "id VARCHAR, display_name VARCHAR", [("A1", "Ada"), ("A2", "Grace")])
     _write_parquet(root / "TOPIC_MASTER" / "t.parquet", "id VARCHAR, display_name VARCHAR", [("T1", "AI")])
-    _write_parquet(root / "WORK_AUTHOR_EDGES" / "wa.parquet", "work_id VARCHAR, author_id VARCHAR", [("W1", "A1")])
+    _write_parquet(root / "WORK_AUTHOR_EDGES" / "wa.parquet", "work_id VARCHAR, author_id VARCHAR", [("W1", "A1"), ("W1", "A2"), ("W2", "A1")])
     _write_parquet(root / "WORK_TOPIC_EDGES" / "wt.parquet", "work_id VARCHAR, topic_id VARCHAR", [("W1", "T1")])
+    _write_parquet(root / "AUTHOR_INSTITUTION_EDGES" / "ai.parquet", "work_id VARCHAR, author_id VARCHAR, institution_id VARCHAR", [("W1", "A1", "I1")])
+    _write_parquet(root / "COUNTRY_COLLAB_EDGES" / "cc.parquet", "work_id VARCHAR, country_a VARCHAR, country_b VARCHAR, _source_key VARCHAR", [("W1", "PK", "US", "k")])
     _write_parquet(root / "CITATION_EDGES" / "c.parquet", "work_id VARCHAR, referenced_work_id VARCHAR", [("W1", "W0"), ("W2", "W1")])
 
     db = tmp_path / "openalex.duckdb"
     meta = build_catalog(db, root)
-    assert set(meta["macros"]) >= {"work_authors", "work_topics", "references_from", "citations_to"}
+    assert set(meta["macros"]) >= {
+        "work_authors", "work_topics", "references_from", "citations_to",
+        "author_works", "coauthors", "institution_works", "country_collaborations"
+    }
 
     con = duckdb.connect(str(db), read_only=True)
-    assert con.execute("SELECT display_name FROM oa.work_authors('W1')").fetchone()[0] == "Ada"
+    assert con.execute("SELECT display_name FROM oa.work_authors('W1') ORDER BY display_name").fetchone()[0] == "Ada"
     assert con.execute("SELECT display_name FROM oa.work_topics('W1')").fetchone()[0] == "AI"
+    assert con.execute("SELECT title FROM oa.author_works('A1') ORDER BY work_id").fetchone()[0] == "Paper 1"
+    assert con.execute("SELECT coauthor_id,shared_work_count FROM oa.coauthors('A1')").fetchone() == ("A2", 1)
+    assert con.execute("SELECT title FROM oa.institution_works('I1')").fetchone()[0] == "Paper 1"
+    assert con.execute("SELECT partner_country FROM oa.country_collaborations('PK')").fetchone()[0] == "US"
     assert con.execute("SELECT referenced_work_id FROM oa.references_from('W1')").fetchone()[0] == "W0"
     assert con.execute("SELECT work_id FROM oa.citations_to('W1')").fetchone()[0] == "W2"
     con.close()
