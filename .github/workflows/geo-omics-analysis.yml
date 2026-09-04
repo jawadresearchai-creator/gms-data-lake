@@ -39,11 +39,12 @@ jobs:
           RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
         run: |
           mkdir -p geo_data geo_results
-          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE33505/GSE33505_series_matrix.txt.gz geo_data/GSE33505_series_matrix.txt.gz
-          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE90077/GSE90077_JBM_counts.txt.gz geo_data/GSE90077_JBM_counts.txt.gz
-          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE163270/GSE163270_RAW.tar geo_data/GSE163270_RAW.tar
-          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE180220/GSE180220_Normalized_processed_data.xlsx geo_data/GSE180220_Normalized_processed_data.xlsx
-          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE180220/GPL9020_full.txt geo_data/GPL9020_full.txt
+          RAW='01_RAW_IMMUTABLE/22_PUBLIC_OMICS_GEO/arabidopsis_expression'
+          rclone copyto "gdrive:${RAW}/GEO_GSE33505/GSE33505_series_matrix.txt.gz" geo_data/GSE33505_series_matrix.txt.gz
+          rclone copyto "gdrive:${RAW}/GEO_GSE90077/GSE90077_JBM_counts.txt.gz" geo_data/GSE90077_JBM_counts.txt.gz
+          rclone copyto "gdrive:${RAW}/GEO_GSE163270/GSE163270_RAW.tar" geo_data/GSE163270_RAW.tar
+          rclone copyto "gdrive:${RAW}/GEO_GSE180220/GSE180220_Normalized_processed_data.xlsx" geo_data/GSE180220_Normalized_processed_data.xlsx
+          rclone copyto "gdrive:${RAW}/GEO_GSE180220/GPL9020_full.txt" geo_data/GPL9020_full.txt
           ls -lh geo_data
 
       - name: Run standard transcriptomics reanalysis
