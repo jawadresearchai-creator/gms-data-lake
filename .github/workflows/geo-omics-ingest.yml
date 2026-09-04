@@ -1,0 +1,64 @@
+name: GEO public omics ingest
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/geo-omics-ingest.yml"
+      - "registry/22_public_omics_geo.yaml"
+
+concurrency:
+  group: gmsdl-geo-public-omics
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Validate GEO registry selection
+        run: |
+          python -m gmsdl.cli plan --domain '^22_PUBLIC_OMICS_GEO$' --tier core
+          python -m gmsdl.cli run --domain '^22_PUBLIC_OMICS_GEO$' --tier core --dry-run
+
+      - name: Fetch GEO data and ship to Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          GMSDL_CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+          GMSDL_REMOTE_ROOT: ""
+          GMSDL_MANIFEST_NAME: manifest_22_PUBLIC_OMICS_GEO.sqlite
+          GMSDL_MAX_WORKDIR_BYTES: "2147483648"
+          GMSDL_RUN_BUDGET_SECONDS: "2400"
+        run: |
+          python -m gmsdl.cli run --domain '^22_PUBLIC_OMICS_GEO$' --tier core --strict
+
+      - name: Upload run state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-22-public-omics-geo
+          path: _state/
+          retention-days: 30
+          if-no-files-found: ignore
