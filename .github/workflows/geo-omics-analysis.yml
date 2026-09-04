@@ -1,0 +1,74 @@
+name: GEO public omics Bioconductor analysis
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/geo-omics-analysis.yml"
+      - "analysis/geo_target_panel_reanalysis.R"
+
+concurrency:
+  group: gmsdl-geo-public-omics-analysis
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install R/Bioconductor and rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y r-base r-bioc-limma r-bioc-edger r-cran-readxl
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          Rscript -e 'library(limma); library(edgeR); library(readxl); sessionInfo()'
+          rclone version
+
+      - name: Pull required GEO processed data from Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        run: |
+          mkdir -p geo_data geo_results
+          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE33505/GSE33505_series_matrix.txt.gz geo_data/GSE33505_series_matrix.txt.gz
+          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE90077/GSE90077_JBM_counts.txt.gz geo_data/GSE90077_JBM_counts.txt.gz
+          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE163270/GSE163270_RAW.tar geo_data/GSE163270_RAW.tar
+          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE180220/GSE180220_Normalized_processed_data.xlsx geo_data/GSE180220_Normalized_processed_data.xlsx
+          rclone copyto gdrive:22_PUBLIC_OMICS_GEO/arabidopsis_expression/GEO_GSE180220/GPL9020_full.txt geo_data/GPL9020_full.txt
+          ls -lh geo_data
+
+      - name: Run standard transcriptomics reanalysis
+        run: |
+          Rscript analysis/geo_target_panel_reanalysis.R geo_data geo_results
+          echo "--- combined results ---"
+          cat geo_results/public_omics_target_panel_bioconductor.csv
+
+      - name: Ship curated results to Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        run: |
+          rclone copy geo_results gdrive:02_CURATED/public_omics/arabidopsis/acetophenone_target_panel_bioconductor_v1 --checksum --retries 5 --low-level-retries 10
+          rclone lsl gdrive:02_CURATED/public_omics/arabidopsis/acetophenone_target_panel_bioconductor_v1
+
+      - name: Upload analysis artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geo-bioconductor-target-panel
+          path: geo_results/
+          retention-days: 90
+          if-no-files-found: error
