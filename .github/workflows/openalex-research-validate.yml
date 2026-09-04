@@ -51,18 +51,27 @@ jobs:
             rclone lsf "$base/$1" --files-only --recursive 2>/dev/null | grep -Ec '\.parquet$' || true
           }
 
-          work_shards=$(count_table WORK_MASTER)
+          rclone lsf "$base/WORK_MASTER" --files-only --recursive 2>/dev/null | grep -E '\.parquet$' | sort > validation/work_master_paths.txt
+          work_shards=$(wc -l < validation/work_master_paths.txt)
           (( work_shards > 0 )) || { echo "ERROR: WORK_MASTER has no Parquet shards" >&2; exit 1; }
           echo "WORK_MASTER shards=$work_shards"
 
+          mismatch=0
           for table in "${edges[@]}"; do
-            n=$(count_table "$table")
+            path_file="validation/${table,,}_paths.txt"
+            rclone lsf "$base/$table" --files-only --recursive 2>/dev/null | grep -E '\.parquet$' | sort > "$path_file"
+            n=$(wc -l < "$path_file")
             echo "$table shards=$n"
-            [[ "$n" -eq "$work_shards" ]] || {
-              echo "ERROR: $table shard count $n does not match WORK_MASTER $work_shards" >&2
-              exit 1
-            }
+            extra=$(comm -13 validation/work_master_paths.txt "$path_file" || true)
+            missing=$(comm -23 validation/work_master_paths.txt "$path_file" || true)
+            if [[ -n "$extra" || -n "$missing" ]]; then
+              mismatch=1
+              echo "PATH_MISMATCH $table"
+              [[ -z "$extra" ]] || { echo "EXTRA:"; printf '%s\n' "$extra"; }
+              [[ -z "$missing" ]] || { echo "MISSING:"; printf '%s\n' "$missing"; }
+            fi
           done
+          (( mismatch == 0 )) || { echo "ERROR: edge shard paths do not exactly match WORK_MASTER" >&2; exit 1; }
 
           for table in "${tables[@]}"; do
             remote="$base/$table"
