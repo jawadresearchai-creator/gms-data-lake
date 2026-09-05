@@ -52,7 +52,7 @@ jobs:
           rclone copyto "mgmt:00_CONTROL/reports/run_118ee51e5b93.md" "agri:CONTROL/run_118ee51e5b93.md" --checksum --retries 5 --low-level-retries 10
 
           echo '--- agriculture destination before cleanup ---' | tee audit/agriculture_listing.txt
-          rclone lsl "agri:PUBLIC_OMICS/ARABIDOPSIS" --recursive | tee -a audit/agriculture_listing.txt
+          rclone lsl "agri:PUBLIC_OMICS/ARABIDOPSIS" | tee -a audit/agriculture_listing.txt
           rclone lsl "agri:CONTROL" | tee -a audit/agriculture_listing.txt
 
       - name: Remove migrated agriculture objects from management-science lake
