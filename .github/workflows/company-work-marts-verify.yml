@@ -22,7 +22,7 @@ jobs:
         run: |
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
-      - name: Stage marts and validate
+      - name: Stage v2 marts and validate
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -34,10 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p input report
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/PRODUCTION_BRIDGE.parquet --stats 0
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/COMPANY_RESEARCH_YEAR/part-0000.parquet input/COMPANY_RESEARCH_YEAR.parquet --stats 0
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/COMPANY_TOPIC_YEAR/part-0000.parquet input/COMPANY_TOPIC_YEAR.parquet --stats 0
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/COMPANY_COLLABORATION_YEAR/part-0000.parquet input/COMPANY_COLLABORATION_YEAR.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v2/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/PRODUCTION_BRIDGE.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v2/COMPANY_RESEARCH_YEAR/part-0000.parquet input/COMPANY_RESEARCH_YEAR.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v2/COMPANY_TOPIC_YEAR/part-0000.parquet input/COMPANY_TOPIC_YEAR.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v2/COMPANY_COLLABORATION_YEAR/part-0000.parquet input/COMPANY_COLLABORATION_YEAR.parquet --stats 0
           python -m gmsdl.analytics.company_work_marts_validate \
             --production-bridge input/PRODUCTION_BRIDGE.parquet \
             --company-research-year input/COMPANY_RESEARCH_YEAR.parquet \
@@ -45,5 +45,5 @@ jobs:
             --company-collaboration-year input/COMPANY_COLLABORATION_YEAR.parquet \
             --output report/company_work_marts_validation.json
           rclone copyto report/company_work_marts_validation.json \
-            gdrive:00_CONTROL/analytics/cross_domain/company_work_marts_validation.json --stats 0
+            gdrive:00_CONTROL/analytics/cross_domain/v2/company_work_marts_validation.json --stats 0
           cat report/company_work_marts_validation.json
