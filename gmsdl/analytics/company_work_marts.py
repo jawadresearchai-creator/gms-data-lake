@@ -215,6 +215,7 @@ def reduce_local(partial_root: Path, out_dir: Path) -> dict[str,int]:
 def reduce_remote() -> int:
     partial=os.environ.get('GMSDL_COMPANY_WORK_PARTIAL_REMOTE',PARTIAL_DEFAULT).rstrip('/')
     target=os.environ.get('GMSDL_COMPANY_WORK_TARGET_REMOTE',TARGET_DEFAULT).rstrip('/')
+    control=os.environ.get('GMSDL_COMPANY_WORK_CONTROL_REMOTE',CONTROL_DEFAULT).rstrip('/')
     with tempfile.TemporaryDirectory(prefix='company-work-reduce-') as td:
         root=Path(td); local=root/'partials'; out=root/'out'
         _run(['copy',partial,str(local),'--stats','0'])
@@ -225,7 +226,7 @@ def reduce_remote() -> int:
         for mart in result:
             _run(['copyto',str(out/f'{mart}.parquet'),f'{target}/{mart}/part-0000.parquet','--stats','0'])
         mf=root/'company_work_marts_manifest.json'; mf.write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-        _run(['copyto',str(mf),'gdrive:00_CONTROL/analytics/cross_domain/company_work_marts_manifest.json','--stats','0'])
+        _run(['copyto',str(mf),f'{control}/company_work_marts_manifest.json','--stats','0'])
         print(json.dumps(manifest,indent=2,sort_keys=True))
     return 0
 

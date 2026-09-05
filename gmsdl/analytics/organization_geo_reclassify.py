@@ -106,6 +106,8 @@ def reclassify(
                     decision, reason = 'KEEP_REVIEW', 'review_evidence_not_sufficient'
 
             row.update({
+                'match_method': method,
+                'confidence_tier': row.get('confidence_tier') or row.get('tier'),
                 'source_bucket': source,
                 'sec_business_country_iso2': sec_country,
                 'openalex_country_iso2': oa_country,
@@ -114,6 +116,7 @@ def reclassify(
                 'country_conflict': country_conflict,
                 'reclassification_decision': decision,
                 'reclassification_reason': reason,
+                'production_approved_v2': decision in {'KEEP_PRODUCTION','PROMOTE'},
             })
             records.append(row)
         return records

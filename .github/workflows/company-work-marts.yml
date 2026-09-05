@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: company-work-marts
+  group: company-work-marts-v2
   cancel-in-progress: false
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
         run: |
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
-      - name: Stage production bridge
+      - name: Stage geography-validated production bridge v2
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -41,8 +41,8 @@ jobs:
           RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
         run: |
           mkdir -p input
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE.parquet --stats 0
-      - name: Build resumable work-level partials
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v2/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE.parquet --stats 0
+      - name: Build resumable work-level partials v2
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -50,6 +50,8 @@ jobs:
           RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
           RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
           RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          GMSDL_COMPANY_WORK_PARTIAL_REMOTE: gdrive:03_RESEARCH/cross_domain/v2/_partials/company_work_marts
+          GMSDL_COMPANY_WORK_CONTROL_REMOTE: gdrive:00_CONTROL/analytics/cross_domain/v2/company_work_marts
         run: python -m gmsdl.analytics.company_work_marts map --batch ${{ matrix.batch }} --batches 120 --production-bridge input/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE.parquet
 
   reduce:
@@ -68,7 +70,7 @@ jobs:
         run: |
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
-      - name: Reduce and publish work-level marts
+      - name: Reduce and publish work-level marts v2
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -76,10 +78,13 @@ jobs:
           RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
           RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
           RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          GMSDL_COMPANY_WORK_PARTIAL_REMOTE: gdrive:03_RESEARCH/cross_domain/v2/_partials/company_work_marts
+          GMSDL_COMPANY_WORK_CONTROL_REMOTE: gdrive:00_CONTROL/analytics/cross_domain/v2/company_work_marts
+          GMSDL_COMPANY_WORK_TARGET_REMOTE: gdrive:03_RESEARCH/cross_domain/v2
         shell: bash
         run: |
           set -euo pipefail
           python -m gmsdl.analytics.company_work_marts reduce
-          rclone lsf gdrive:03_RESEARCH/cross_domain/v1/COMPANY_TOPIC_YEAR/part-0000.parquet >/dev/null
-          rclone lsf gdrive:03_RESEARCH/cross_domain/v1/COMPANY_COLLABORATION_YEAR/part-0000.parquet >/dev/null
-          rclone cat gdrive:00_CONTROL/analytics/cross_domain/company_work_marts_manifest.json
+          rclone lsf gdrive:03_RESEARCH/cross_domain/v2/COMPANY_TOPIC_YEAR/part-0000.parquet >/dev/null
+          rclone lsf gdrive:03_RESEARCH/cross_domain/v2/COMPANY_COLLABORATION_YEAR/part-0000.parquet >/dev/null
+          rclone cat gdrive:00_CONTROL/analytics/cross_domain/v2/company_work_marts/company_work_marts_manifest.json

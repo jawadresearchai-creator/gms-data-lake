@@ -22,7 +22,7 @@ jobs:
         run: |
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
-      - name: Stage production organization bridge and institution-year mart
+      - name: Stage geography-validated production bridge and institution-year mart
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -35,9 +35,9 @@ jobs:
           set -euo pipefail
           mkdir -p input out
           rclone copyto gdrive:03_RESEARCH/cross_domain/v1/ORGANIZATION_MASTER/part-0000.parquet input/ORGANIZATION_MASTER.parquet --stats 0
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v2/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE.parquet --stats 0
           rclone copyto gdrive:03_RESEARCH/openalex/v1/marts/WORK_YEAR_INSTITUTION/part-0000.parquet input/WORK_YEAR_INSTITUTION.parquet --stats 0
-      - name: Build and publish company-year marts
+      - name: Build and publish company-year marts v2
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -53,7 +53,7 @@ jobs:
             --production-bridge input/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE.parquet \
             --work-year-institution input/WORK_YEAR_INSTITUTION.parquet \
             --out-dir out
-          rclone copyto out/COMPANY_RESEARCH_YEAR.parquet gdrive:03_RESEARCH/cross_domain/v1/COMPANY_RESEARCH_YEAR/part-0000.parquet --stats 0
-          rclone copyto out/COMPANY_CITATION_YEAR.parquet gdrive:03_RESEARCH/cross_domain/v1/COMPANY_CITATION_YEAR/part-0000.parquet --stats 0
-          rclone copyto out/company_research_year_manifest.json gdrive:00_CONTROL/analytics/cross_domain/company_research_year_manifest.json --stats 0
+          rclone copyto out/COMPANY_RESEARCH_YEAR.parquet gdrive:03_RESEARCH/cross_domain/v2/COMPANY_RESEARCH_YEAR/part-0000.parquet --stats 0
+          rclone copyto out/COMPANY_CITATION_YEAR.parquet gdrive:03_RESEARCH/cross_domain/v2/COMPANY_CITATION_YEAR/part-0000.parquet --stats 0
+          rclone copyto out/company_research_year_manifest.json gdrive:00_CONTROL/analytics/cross_domain/v2/company_research_year_manifest.json --stats 0
           cat out/company_research_year_manifest.json
