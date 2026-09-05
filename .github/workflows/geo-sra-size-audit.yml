@@ -1,0 +1,68 @@
+name: GEO SRA raw-size audit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/geo-sra-size-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Query NCBI SRA RunInfo and summarize sizes
+        run: |
+          python - <<'PY'
+          import csv, io, json, urllib.parse, urllib.request
+          from pathlib import Path
+
+          studies = {"GSE90077":"SRP093697", "GSE163270":"SRP298048"}
+          out = Path("sra_size_audit")
+          out.mkdir(exist_ok=True)
+
+          def get_json(url):
+              req = urllib.request.Request(url, headers={"User-Agent":"gms-data-lake/1.0 contact=jawadresearch.ai@gmail.com"})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  return json.load(r)
+
+          def get_text(url):
+              req = urllib.request.Request(url, headers={"User-Agent":"gms-data-lake/1.0 contact=jawadresearch.ai@gmail.com"})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  return r.read().decode("utf-8")
+
+          summary_rows=[]
+          for gse, study in studies.items():
+              q=urllib.parse.quote(study)
+              es=f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=sra&term={q}&retmax=200&retmode=json"
+              js=get_json(es)
+              ids=js["esearchresult"]["idlist"]
+              if not ids:
+                  raise SystemExit(f"No SRA records for {study}")
+              ef="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=sra&id="+",".join(ids)+"&rettype=runinfo&retmode=text"
+              txt=get_text(ef)
+              (out/f"{gse}_{study}_RunInfo.csv").write_text(txt, encoding="utf-8")
+              rows=list(csv.DictReader(io.StringIO(txt)))
+              print("\n", gse, study, "rows", len(rows))
+              if rows:
+                  print("columns:", ",".join(rows[0].keys()))
+              for r in rows:
+                  print("RUN", r.get("Run"), "MB", r.get("MBytes"), "Experiment", r.get("Experiment"), "SampleName", r.get("SampleName"), "LibraryName", r.get("LibraryName"))
+              total_mb=sum(float(r.get("MBytes") or 0) for r in rows)
+              total_bases=sum(int(float(r.get("bases") or 0)) for r in rows)
+              total_spots=sum(int(float(r.get("spots") or 0)) for r in rows)
+              summary_rows.append({"GSE":gse,"SRA_Study":study,"runs":len(rows),"SRA_MBytes":round(total_mb,3),"SRA_GiB":round(total_mb/1024,3),"bases":total_bases,"spots":total_spots})
+          with (out/"summary.csv").open("w",newline="",encoding="utf-8") as f:
+              w=csv.DictWriter(f, fieldnames=summary_rows[0].keys()); w.writeheader(); w.writerows(summary_rows)
+          print("\nSUMMARY")
+          for r in summary_rows: print(r)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geo-sra-size-audit
+          path: sra_size_audit/
+          retention-days: 30
