@@ -1,0 +1,74 @@
+name: Build SEC Filing Section Bridge
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Stage filing master and archived section metadata
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          RCLONE_CONFIG_DRIVEALL_TYPE: drive
+          RCLONE_CONFIG_DRIVEALL_SCOPE: drive
+          RCLONE_CONFIG_DRIVEALL_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_DRIVEALL_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_DRIVEALL_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input out
+          rclone copyto \
+            gdrive:03_RESEARCH/cross_domain/v1/FILING_MASTER/part-0000.parquet \
+            input/FILING_MASTER.parquet --stats 0
+          rclone copyto \
+            'driveall:Event Study/_laptop_archive_2026-09-01/processed/10k_section_index.csv' \
+            input/10k_section_index.csv --stats 0
+
+      - name: Build and publish filing-section bridge
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m gmsdl.analytics.sec_filing_sections \
+            --section-index input/10k_section_index.csv \
+            --filing-master input/FILING_MASTER.parquet \
+            --out-dir out
+
+          rclone copyto out/FILING_SECTION_BRIDGE.parquet \
+            gdrive:03_RESEARCH/cross_domain/v1/FILING_SECTION_BRIDGE/part-0000.parquet --stats 0
+          rclone copyto out/filing_section_manifest.json \
+            gdrive:00_CONTROL/analytics/cross_domain/filing_section_manifest.json --stats 0
+
+          cat out/filing_section_manifest.json
