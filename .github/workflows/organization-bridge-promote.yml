@@ -1,0 +1,44 @@
+name: Promote Cross-Domain Organization Bridge
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+      - name: Promote validated links
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input out
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/SEC_OPENALEX_ORG_BRIDGE/part-0000.parquet input/SEC_OPENALEX_ORG_BRIDGE.parquet --stats 0
+          python -m gmsdl.analytics.organization_bridge_promote \
+            --accepted-bridge input/SEC_OPENALEX_ORG_BRIDGE.parquet \
+            --out-dir out
+          rclone copyto out/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE.parquet gdrive:03_RESEARCH/cross_domain/v1/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet --stats 0
+          rclone copyto out/SEC_OPENALEX_ORG_QUARANTINE.parquet gdrive:03_RESEARCH/cross_domain/v1/SEC_OPENALEX_ORG_QUARANTINE/part-0000.parquet --stats 0
+          rclone copyto out/organization_bridge_promotion_manifest.json gdrive:00_CONTROL/analytics/cross_domain/organization_bridge_promotion_manifest.json --stats 0
+          cat out/organization_bridge_promotion_manifest.json

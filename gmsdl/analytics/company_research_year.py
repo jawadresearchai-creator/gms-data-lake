@@ -7,26 +7,26 @@ from pathlib import Path
 import duckdb
 
 
-def build_company_year_marts(org_master: Path, work_year_institution: Path, out_dir: Path) -> dict:
+def build_company_year_marts(org_master: Path, production_bridge: Path, work_year_institution: Path, out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(database=':memory:')
     try:
         con.execute(f"CREATE VIEW org AS SELECT * FROM read_parquet('{org_master.as_posix()}')")
+        con.execute(f"CREATE VIEW prod AS SELECT * FROM read_parquet('{production_bridge.as_posix()}')")
         con.execute(f"CREATE VIEW wyi AS SELECT * FROM read_parquet('{work_year_institution.as_posix()}')")
 
-        linked_orgs = int(con.execute("SELECT COUNT(*) FROM org WHERE has_openalex_link").fetchone()[0])
+        linked_orgs = int(con.execute('SELECT COUNT(*) FROM prod').fetchone()[0])
         if linked_orgs == 0:
-            raise RuntimeError('organization master has zero accepted OpenAlex links')
+            raise RuntimeError('production bridge has zero approved OpenAlex links')
 
         dup_links = int(con.execute('''
             SELECT COUNT(*) FROM (
-              SELECT openalex_institution_id FROM org
-              WHERE has_openalex_link
+              SELECT openalex_institution_id FROM prod
               GROUP BY openalex_institution_id HAVING COUNT(*)>1
             )
         ''').fetchone()[0])
         if dup_links:
-            raise RuntimeError(f'organization master has {dup_links} duplicate OpenAlex institution links')
+            raise RuntimeError(f'production bridge has {dup_links} duplicate OpenAlex institution links')
 
         con.execute('''
             CREATE TABLE company_research_year AS
@@ -36,25 +36,25 @@ def build_company_year_marts(org_master: Path, work_year_institution: Path, out_
               o.cik,
               o.company_name,
               o.primary_ticker,
-              o.openalex_institution_id,
-              o.openalex_name,
-              o.ror,
-              o.openalex_country_code,
-              o.openalex_institution_type,
-              o.match_method,
-              o.match_confidence,
-              o.confidence_tier,
+              p.openalex_institution_id,
+              p.openalex_name,
+              p.ror,
+              p.country_code AS openalex_country_code,
+              p.institution_type AS openalex_institution_type,
+              p.match_method,
+              p.confidence AS match_confidence,
+              p.confidence_tier,
               w.publication_year,
               SUM(w.work_count)::BIGINT AS work_count,
               SUM(w.citation_sum)::BIGINT AS citation_sum,
               CAST(SUM(w.citation_sum) AS DOUBLE)/NULLIF(SUM(w.work_count),0) AS mean_citations
             FROM org o
-            JOIN wyi w ON w.institution_id=o.openalex_institution_id
-            WHERE o.has_openalex_link
+            JOIN prod p USING (canonical_company_id)
+            JOIN wyi w ON w.institution_id=p.openalex_institution_id
             GROUP BY
               o.canonical_org_id,o.canonical_company_id,o.cik,o.company_name,o.primary_ticker,
-              o.openalex_institution_id,o.openalex_name,o.ror,o.openalex_country_code,
-              o.openalex_institution_type,o.match_method,o.match_confidence,o.confidence_tier,
+              p.openalex_institution_id,p.openalex_name,p.ror,p.country_code,
+              p.institution_type,p.match_method,p.confidence,p.confidence_tier,
               w.publication_year
         ''')
 
@@ -88,9 +88,13 @@ def build_company_year_marts(org_master: Path, work_year_institution: Path, out_
             )
         ''').fetchone()[0])
         negative = int(con.execute('''SELECT COUNT(*) FROM company_research_year WHERE work_count<0 OR citation_sum<0 OR mean_citations<0''').fetchone()[0])
-        review_leak = int(con.execute('''SELECT COUNT(*) FROM company_research_year WHERE confidence_tier NOT IN ('EXACT','HIGH')''').fetchone()[0])
-        if duplicate_keys or negative or review_leak:
-            raise RuntimeError(f'company-year QA failed: duplicate_keys={duplicate_keys} negative_metrics={negative} review_leak={review_leak}')
+        nonprod = int(con.execute('''
+            SELECT COUNT(*) FROM company_research_year r
+            LEFT JOIN prod p USING (canonical_company_id)
+            WHERE p.canonical_company_id IS NULL
+        ''').fetchone()[0])
+        if duplicate_keys or negative or nonprod:
+            raise RuntimeError(f'company-year QA failed: duplicate_keys={duplicate_keys} negative_metrics={negative} nonproduction_leak={nonprod}')
 
         research_out = out_dir/'COMPANY_RESEARCH_YEAR.parquet'
         citation_out = out_dir/'COMPANY_CITATION_YEAR.parquet'
@@ -101,18 +105,18 @@ def build_company_year_marts(org_master: Path, work_year_institution: Path, out_
 
     manifest = {
         'version':'v1',
-        'input_linked_organizations':linked_orgs,
+        'input_production_organizations':linked_orgs,
         'companies_with_research_rows':companies_with_research,
         'companies_without_research_rows':linked_orgs-companies_with_research,
         'company_research_year_rows':research_rows,
         'company_citation_year_rows':citation_rows,
         'min_publication_year':years[0],
         'max_publication_year':years[1],
-        'identity_policy':'accepted ORGANIZATION_MASTER links only; review queue excluded',
+        'identity_policy':'production-approved SEC_OPENALEX_ORG_PRODUCTION_BRIDGE links only; quarantine and review queue excluded',
         'qa':{
             'duplicate_company_year_keys':duplicate_keys,
             'negative_metric_rows':negative,
-            'review_candidate_leak_rows':review_leak,
+            'nonproduction_leak_rows':nonprod,
         },
     }
     (out_dir/'company_research_year_manifest.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n',encoding='utf-8')
@@ -122,10 +126,11 @@ def build_company_year_marts(org_master: Path, work_year_institution: Path, out_
 def main() -> int:
     p=argparse.ArgumentParser(description='Build SEC/OpenAlex company-year research marts')
     p.add_argument('--organization-master',type=Path,required=True)
+    p.add_argument('--production-bridge',type=Path,required=True)
     p.add_argument('--work-year-institution',type=Path,required=True)
     p.add_argument('--out-dir',type=Path,required=True)
     a=p.parse_args()
-    print(json.dumps(build_company_year_marts(a.organization_master,a.work_year_institution,a.out_dir),indent=2,sort_keys=True))
+    print(json.dumps(build_company_year_marts(a.organization_master,a.production_bridge,a.work_year_institution,a.out_dir),indent=2,sort_keys=True))
     return 0
 
 
