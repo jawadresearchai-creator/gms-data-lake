@@ -89,7 +89,7 @@ def build_universe(index_paths: list[Path]) -> list[Filing]:
     latest: dict[str, Filing] = {}
     for f in eligible:
         old = latest.get(f.cik)
-        if old is None or (f.filing_date, f.filename) > (old.filing_date, old.filename):
+        if old is None or f.filing_date > old.filing_date:
             latest[f.cik] = f
     return sorted(latest.values(), key=lambda f: (f.cik, f.filing_date, f.filename))
 

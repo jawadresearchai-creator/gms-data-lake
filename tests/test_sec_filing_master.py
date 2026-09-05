@@ -53,3 +53,14 @@ def test_build_filing_master(tmp_path: Path) -> None:
     ).fetchone()[0]
     assert bridge == 2
     con.close()
+
+def test_same_day_selection_preserves_first_index_row(tmp_path: Path) -> None:
+    idx = tmp_path / 'master.idx'
+    _write_idx(idx, [
+        '123|Co|10-K|2024-02-01|edgar/data/123/first.txt',
+        '123|Co|10-K|2024-02-01|edgar/data/123/second.txt',
+    ])
+    from gmsdl.analytics.sec_filing_master import build_universe
+    rows = build_universe([idx])
+    assert len(rows) == 1
+    assert rows[0].filename == 'edgar/data/123/first.txt'
