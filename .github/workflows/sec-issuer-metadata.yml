@@ -1,0 +1,68 @@
+name: Build SEC Issuer Metadata
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+      - name: Stage company master and SEC submissions archive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input out
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/COMPANY_MASTER_COMPLETE/part-0000.parquet input/COMPANY_MASTER_COMPLETE.parquet --stats 0
+          raw='gdrive:01_RAW_IMMUTABLE/01_FINANCE_AND_CAPITAL_MARKETS/filings/SEC_BULK/submissions.zip'
+          if ! rclone copyto "$raw" input/submissions.zip --stats 0; then
+            echo 'Raw submissions.zip not found in lake; fetching registered SEC bulk source.'
+            curl -fL --retry 5 --retry-all-errors \
+              -A 'GMS Data Lake jawadresearch.ai@gmail.com' \
+              -H 'Referer: https://www.sec.gov/' \
+              'https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip' \
+              -o input/submissions.zip
+            rclone copyto input/submissions.zip "$raw" --stats 0
+          fi
+          ls -lh input/submissions.zip
+      - name: Build and publish issuer metadata
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m gmsdl.analytics.sec_issuer_metadata \
+            --company-master input/COMPANY_MASTER_COMPLETE.parquet \
+            --submissions-zip input/submissions.zip \
+            --out-dir out
+          rclone copyto out/SEC_ISSUER_METADATA.parquet \
+            gdrive:03_RESEARCH/cross_domain/v1/SEC_ISSUER_METADATA/part-0000.parquet --stats 0
+          rclone copyto out/sec_issuer_metadata_manifest.json \
+            gdrive:00_CONTROL/analytics/cross_domain/sec_issuer_metadata_manifest.json --stats 0
+          cat out/sec_issuer_metadata_manifest.json
