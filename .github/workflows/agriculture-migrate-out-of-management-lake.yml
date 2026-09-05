@@ -1,0 +1,89 @@
+name: Migrate agriculture omics out of management-science lake
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/agriculture-migrate-out-of-management-lake.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RCLONE_CONFIG_MGMT_TYPE: drive
+      RCLONE_CONFIG_MGMT_SCOPE: drive
+      RCLONE_CONFIG_MGMT_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_MGMT_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_MGMT_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_MGMT_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+      RCLONE_CONFIG_AGRI_TYPE: drive
+      RCLONE_CONFIG_AGRI_SCOPE: drive
+      RCLONE_CONFIG_AGRI_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_AGRI_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_AGRI_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_AGRI_ROOT_FOLDER_ID: 1nvqPV6Ko6X3eP7yQ9wwzBPy0NCkfjIOF
+    steps:
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Copy agriculture data to separate Drive root and verify
+        run: |
+          set -euo pipefail
+          mkdir -p audit
+
+          RAW_SRC='01_RAW_IMMUTABLE/22_PUBLIC_OMICS_GEO/arabidopsis_expression'
+          RAW_DST='PUBLIC_OMICS/ARABIDOPSIS/PROCESSED_REFERENCE'
+          CUR_SRC='02_CURATED/public_omics/arabidopsis'
+          CUR_DST='PUBLIC_OMICS/ARABIDOPSIS/CURATED'
+
+          rclone copy "mgmt:$RAW_SRC" "agri:$RAW_DST" --checksum --retries 5 --low-level-retries 10
+          rclone check "mgmt:$RAW_SRC" "agri:$RAW_DST" --one-way --download | tee audit/raw_check.txt
+
+          rclone copy "mgmt:$CUR_SRC" "agri:$CUR_DST" --checksum --retries 5 --low-level-retries 10
+          rclone check "mgmt:$CUR_SRC" "agri:$CUR_DST" --one-way --download | tee audit/curated_check.txt
+
+          rclone copyto "mgmt:00_CONTROL/manifests/manifest_22_PUBLIC_OMICS_GEO.sqlite" "agri:CONTROL/manifest_22_PUBLIC_OMICS_GEO.sqlite" --checksum --retries 5 --low-level-retries 10
+          rclone copyto "mgmt:00_CONTROL/reports/run_118ee51e5b93.md" "agri:CONTROL/run_118ee51e5b93.md" --checksum --retries 5 --low-level-retries 10
+
+          echo '--- agriculture destination before cleanup ---' | tee audit/agriculture_listing.txt
+          rclone lsl "agri:PUBLIC_OMICS/ARABIDOPSIS" --recursive | tee -a audit/agriculture_listing.txt
+          rclone lsl "agri:CONTROL" | tee -a audit/agriculture_listing.txt
+
+      - name: Remove migrated agriculture objects from management-science lake
+        run: |
+          set -euo pipefail
+          rclone purge "mgmt:01_RAW_IMMUTABLE/22_PUBLIC_OMICS_GEO/arabidopsis_expression"
+          rclone rmdir "mgmt:01_RAW_IMMUTABLE/22_PUBLIC_OMICS_GEO" || true
+          rclone purge "mgmt:02_CURATED/public_omics/arabidopsis"
+          rclone rmdir "mgmt:02_CURATED/public_omics" || true
+          rclone deletefile "mgmt:00_CONTROL/manifests/manifest_22_PUBLIC_OMICS_GEO.sqlite"
+          rclone deletefile "mgmt:00_CONTROL/reports/run_118ee51e5b93.md"
+
+      - name: Prove management-science lake is clean of this agriculture dataset
+        run: |
+          set -euo pipefail
+          mkdir -p audit
+          {
+            echo 'Checking removed raw prefix:'
+            if rclone lsf "mgmt:01_RAW_IMMUTABLE/22_PUBLIC_OMICS_GEO" 2>/dev/null; then echo 'ERROR raw prefix still exists'; exit 1; else echo 'raw prefix absent'; fi
+            echo 'Checking removed curated prefix:'
+            if rclone lsf "mgmt:02_CURATED/public_omics" 2>/dev/null; then echo 'ERROR curated prefix still exists'; exit 1; else echo 'curated prefix absent'; fi
+            echo 'Checking manifest:'
+            if rclone lsf "mgmt:00_CONTROL/manifests/manifest_22_PUBLIC_OMICS_GEO.sqlite" 2>/dev/null; then echo 'ERROR manifest still exists'; exit 1; else echo 'manifest absent'; fi
+            echo 'Checking GEO acquisition report:'
+            if rclone lsf "mgmt:00_CONTROL/reports/run_118ee51e5b93.md" 2>/dev/null; then echo 'ERROR report still exists'; exit 1; else echo 'report absent'; fi
+          } | tee audit/management_lake_cleanup_check.txt
+
+      - name: Upload migration audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: agriculture-storage-separation-audit
+          path: audit/
+          retention-days: 90
+          if-no-files-found: error
