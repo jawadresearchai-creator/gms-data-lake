@@ -1,0 +1,95 @@
+name: Agriculture GSE90077 raw SRA ingest
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/agriculture-gse90077-raw-ingest.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RCLONE_CONFIG_AGRI_TYPE: drive
+      RCLONE_CONFIG_AGRI_SCOPE: drive
+      RCLONE_CONFIG_AGRI_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_AGRI_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_AGRI_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_AGRI_ROOT_FOLDER_ID: 1nvqPV6Ko6X3eP7yQ9wwzBPy0NCkfjIOF
+    steps:
+      - name: Install SRA Toolkit and rclone
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends sra-toolkit
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          prefetch --version
+          vdb-validate --version || true
+          rclone version
+
+      - name: Fetch 12 relevant GSE90077 SRA runs and upload to separate agriculture Drive root
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sra_cache audit
+          DEST='PUBLIC_OMICS/ARABIDOPSIS/GSE90077_RAW_SRA'
+          printf 'run,gsm,expected_size_MB,actual_bytes,sha256,drive_path,status\n' > audit/GSE90077_raw_sra_manifest.csv
+
+          cat > audit/runs.tsv <<'EOF'
+          SRR5038590	GSM2397325	332
+          SRR5038591	GSM2397326	203
+          SRR5038592	GSM2397327	446
+          SRR5038593	GSM2397328	189
+          SRR5038594	GSM2397329	423
+          SRR5038595	GSM2397330	117
+          SRR5038602	GSM2397337	438
+          SRR5038603	GSM2397338	118
+          SRR5038604	GSM2397339	414
+          SRR5038605	GSM2397340	65
+          SRR5038606	GSM2397341	566
+          SRR5038607	GSM2397342	129
+          EOF
+
+          while IFS=$'\t' read -r RUN GSM EXPECTED_MB; do
+            echo "=== $RUN / $GSM ==="
+            rm -rf "sra_cache/$RUN"
+            prefetch "$RUN" --max-size 5G --output-directory "$PWD/sra_cache"
+            SRC="sra_cache/$RUN/$RUN.sra"
+            if [ ! -f "$SRC" ]; then
+              SRC=$(find "sra_cache/$RUN" -type f | head -n 1)
+            fi
+            test -n "$SRC" && test -s "$SRC"
+            vdb-validate "$SRC"
+            ACTUAL_BYTES=$(stat -c%s "$SRC")
+            SHA=$(sha256sum "$SRC" | awk '{print $1}')
+            DRIVE_PATH="$DEST/$RUN.sra"
+            rclone copyto "$SRC" "agri:$DRIVE_PATH" --checksum --retries 5 --low-level-retries 10 --drive-chunk-size 64M
+            REMOTE_SIZE=$(rclone size "agri:$DRIVE_PATH" --json | python -c 'import json,sys; print(json.load(sys.stdin)["bytes"])')
+            test "$REMOTE_SIZE" = "$ACTUAL_BYTES"
+            printf '%s,%s,%s,%s,%s,%s,%s\n' "$RUN" "$GSM" "$EXPECTED_MB" "$ACTUAL_BYTES" "$SHA" "$DRIVE_PATH" 'verified' >> audit/GSE90077_raw_sra_manifest.csv
+            rm -rf "sra_cache/$RUN"
+          done < audit/runs.tsv
+
+          rclone copyto audit/GSE90077_raw_sra_manifest.csv "agri:$DEST/GSE90077_raw_sra_manifest.csv" --retries 5 --low-level-retries 10
+          rclone lsl "agri:$DEST" | tee audit/drive_listing.txt
+          python - <<'PY'
+          import csv
+          rows=list(csv.DictReader(open('audit/GSE90077_raw_sra_manifest.csv', encoding='utf-8')))
+          total=sum(int(r['actual_bytes']) for r in rows)
+          print('verified_runs=', len(rows))
+          print('verified_bytes=', total)
+          print('verified_GiB=', round(total/(1024**3), 3))
+          assert len(rows)==12
+          assert all(r['status']=='verified' for r in rows)
+          PY
+
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agriculture-gse90077-raw-ingest-audit
+          path: audit/
+          retention-days: 90
+          if-no-files-found: error
