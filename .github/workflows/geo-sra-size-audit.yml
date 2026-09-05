@@ -17,46 +17,64 @@ jobs:
       - name: Query NCBI SRA RunInfo and summarize sizes
         run: |
           python - <<'PY'
-          import csv, io, json, urllib.parse, urllib.request
+          import csv, io, json, time, urllib.parse, urllib.request, urllib.error
           from pathlib import Path
 
           studies = {"GSE90077":"SRP093697", "GSE163270":"SRP298048"}
+          relevant90077 = {
+              "GSM2397325","GSM2397326","GSM2397327","GSM2397328","GSM2397329","GSM2397330",
+              "GSM2397337","GSM2397338","GSM2397339","GSM2397340","GSM2397341","GSM2397342"
+          }
           out = Path("sra_size_audit")
           out.mkdir(exist_ok=True)
 
-          def get_json(url):
-              req = urllib.request.Request(url, headers={"User-Agent":"gms-data-lake/1.0 contact=jawadresearch.ai@gmail.com"})
-              with urllib.request.urlopen(req, timeout=60) as r:
-                  return json.load(r)
-
-          def get_text(url):
-              req = urllib.request.Request(url, headers={"User-Agent":"gms-data-lake/1.0 contact=jawadresearch.ai@gmail.com"})
-              with urllib.request.urlopen(req, timeout=60) as r:
-                  return r.read().decode("utf-8")
+          def fetch(url, is_json=False):
+              for attempt in range(6):
+                  try:
+                      req = urllib.request.Request(url, headers={"User-Agent":"gms-data-lake/1.0 contact=jawadresearch.ai@gmail.com"})
+                      with urllib.request.urlopen(req, timeout=60) as r:
+                          data = r.read().decode("utf-8")
+                          return json.loads(data) if is_json else data
+                  except urllib.error.HTTPError as e:
+                      if e.code == 429 and attempt < 5:
+                          time.sleep(2 ** attempt)
+                          continue
+                      raise
 
           summary_rows=[]
-          for gse, study in studies.items():
+          detailed=[]
+          for idx, (gse, study) in enumerate(studies.items()):
+              if idx:
+                  time.sleep(1.0)
               q=urllib.parse.quote(study)
               es=f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=sra&term={q}&retmax=200&retmode=json"
-              js=get_json(es)
+              js=fetch(es, is_json=True)
               ids=js["esearchresult"]["idlist"]
               if not ids:
                   raise SystemExit(f"No SRA records for {study}")
+              time.sleep(0.5)
               ef="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=sra&id="+",".join(ids)+"&rettype=runinfo&retmode=text"
-              txt=get_text(ef)
+              txt=fetch(ef)
               (out/f"{gse}_{study}_RunInfo.csv").write_text(txt, encoding="utf-8")
               rows=list(csv.DictReader(io.StringIO(txt)))
-              print("\n", gse, study, "rows", len(rows))
-              if rows:
-                  print("columns:", ",".join(rows[0].keys()))
-              for r in rows:
-                  print("RUN", r.get("Run"), "MB", r.get("MBytes"), "Experiment", r.get("Experiment"), "SampleName", r.get("SampleName"), "LibraryName", r.get("LibraryName"))
-              total_mb=sum(float(r.get("MBytes") or 0) for r in rows)
+              total_mb=sum(float(r.get("size_MB") or 0) for r in rows)
               total_bases=sum(int(float(r.get("bases") or 0)) for r in rows)
               total_spots=sum(int(float(r.get("spots") or 0)) for r in rows)
-              summary_rows.append({"GSE":gse,"SRA_Study":study,"runs":len(rows),"SRA_MBytes":round(total_mb,3),"SRA_GiB":round(total_mb/1024,3),"bases":total_bases,"spots":total_spots})
+              summary_rows.append({"selection":f"{gse}_all","GSE":gse,"SRA_Study":study,"runs":len(rows),"SRA_MB":round(total_mb,3),"SRA_GiB":round(total_mb/1024,3),"bases":total_bases,"spots":total_spots})
+              if gse == "GSE90077":
+                  rel=[r for r in rows if r.get("SampleName") in relevant90077]
+                  rel_mb=sum(float(r.get("size_MB") or 0) for r in rel)
+                  rel_bases=sum(int(float(r.get("bases") or 0)) for r in rel)
+                  rel_spots=sum(int(float(r.get("spots") or 0)) for r in rel)
+                  summary_rows.append({"selection":"GSE90077_MeJA_plus_Mock_only","GSE":gse,"SRA_Study":study,"runs":len(rel),"SRA_MB":round(rel_mb,3),"SRA_GiB":round(rel_mb/1024,3),"bases":rel_bases,"spots":rel_spots})
+              for r in rows:
+                  rr={"GSE":gse,"Run":r.get("Run"),"SampleName":r.get("SampleName"),"Experiment":r.get("Experiment"),"size_MB":r.get("size_MB"),"spots":r.get("spots"),"bases":r.get("bases"),"avgLength":r.get("avgLength"),"LibraryLayout":r.get("LibraryLayout"),"Model":r.get("Model"),"relevant_for_current_ERF1_question":(gse=="GSE90077" and r.get("SampleName") in relevant90077) or gse=="GSE163270"}
+                  detailed.append(rr)
+                  print(rr)
           with (out/"summary.csv").open("w",newline="",encoding="utf-8") as f:
               w=csv.DictWriter(f, fieldnames=summary_rows[0].keys()); w.writeheader(); w.writerows(summary_rows)
+          with (out/"runs.csv").open("w",newline="",encoding="utf-8") as f:
+              w=csv.DictWriter(f, fieldnames=detailed[0].keys()); w.writeheader(); w.writerows(detailed)
           print("\nSUMMARY")
           for r in summary_rows: print(r)
           PY
