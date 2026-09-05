@@ -1,0 +1,248 @@
+name: Agriculture GSE90077 ERF1 raw recount
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/agriculture-gse90077-erf1-raw-recount.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  recount:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      RCLONE_CONFIG_AGRI_TYPE: drive
+      RCLONE_CONFIG_AGRI_SCOPE: drive
+      RCLONE_CONFIG_AGRI_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_AGRI_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_AGRI_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_AGRI_ROOT_FOLDER_ID: 1nvqPV6Ko6X3eP7yQ9wwzBPy0NCkfjIOF
+    steps:
+      - name: Install alignment and statistical tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            sra-toolkit hisat2 samtools subread r-base r-bioc-edger curl ca-certificates gzip
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          hisat2 --version | head -n 1
+          featureCounts -v 2>&1 | head -n 1 || true
+          Rscript -e 'cat("R ",R.version.string,"\n"); cat("edgeR ",as.character(packageVersion("edgeR")),"\n")'
+
+      - name: Resolve and build TAIR10 reference
+        run: |
+          set -euo pipefail
+          mkdir -p ref results counts work raw
+          REL=''
+          for r in $(seq 80 -1 50); do
+            BASE="https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-$r"
+            FA="$BASE/fasta/arabidopsis_thaliana/dna/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz"
+            GT="$BASE/gtf/arabidopsis_thaliana/Arabidopsis_thaliana.TAIR10.$r.gtf.gz"
+            if curl -fsI "$FA" >/dev/null 2>&1 && curl -fsI "$GT" >/dev/null 2>&1; then
+              REL="$r"; FASTA_URL="$FA"; GTF_URL="$GT"; break
+            fi
+          done
+          test -n "$REL"
+          echo "$REL" > ref/ensembl_plants_release.txt
+          echo "$FASTA_URL" > ref/fasta_url.txt
+          echo "$GTF_URL" > ref/gtf_url.txt
+          curl -fL --retry 5 --retry-delay 2 "$FASTA_URL" -o ref/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz
+          curl -fL --retry 5 --retry-delay 2 "$GTF_URL" -o ref/Arabidopsis_thaliana.TAIR10.gtf.gz
+          sha256sum ref/*.gz > results/reference_sha256.txt
+          gzip -dc ref/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz > ref/genome.fa
+          gzip -dc ref/Arabidopsis_thaliana.TAIR10.gtf.gz > ref/genes.gtf
+          hisat2-build -p 4 ref/genome.fa ref/tair10
+          printf 'ensembl_plants_release,%s\nfasta_url,%s\ngtf_url,%s\n' "$REL" "$FASTA_URL" "$GTF_URL" > results/reference_manifest.csv
+
+      - name: Recount 12 MeJA and Mock libraries from raw SRA
+        run: |
+          set -euo pipefail
+          cat > results/sample_sheet.csv <<'EOF'
+          run,gsm,treatment,time_h,replicate
+          SRR5038590,GSM2397325,MeJA,1,1
+          SRR5038591,GSM2397326,MeJA,1,2
+          SRR5038592,GSM2397327,MeJA,5,1
+          SRR5038593,GSM2397328,MeJA,5,2
+          SRR5038594,GSM2397329,MeJA,8,1
+          SRR5038595,GSM2397330,MeJA,8,2
+          SRR5038602,GSM2397337,Mock,1,1
+          SRR5038603,GSM2397338,Mock,1,2
+          SRR5038604,GSM2397339,Mock,5,1
+          SRR5038605,GSM2397340,Mock,5,2
+          SRR5038606,GSM2397341,Mock,8,1
+          SRR5038607,GSM2397342,Mock,8,2
+          EOF
+
+          tail -n +2 results/sample_sheet.csv | while IFS=',' read -r RUN GSM TRT TIME REP; do
+            echo "=== $RUN $GSM $TRT ${TIME}h rep$REP ==="
+            rclone copyto "agri:PUBLIC_OMICS/ARABIDOPSIS/GSE90077_RAW_SRA/$RUN.sra" "raw/$RUN.sra" --retries 5 --low-level-retries 10
+            vdb-validate "raw/$RUN.sra"
+            fasterq-dump "raw/$RUN.sra" --threads 4 --outdir work
+            test -s "work/$RUN.fastq"
+            READS=$(awk 'END{print NR/4}' "work/$RUN.fastq")
+            printf '%s,%s\n' "$RUN" "$READS" >> results/read_counts.csv
+
+            hisat2 -x ref/tair10 -U "work/$RUN.fastq" -p 4 --summary-file "results/${RUN}_hisat2_summary.txt" \
+              2>"results/${RUN}_hisat2_stderr.txt" | samtools sort -@ 2 -o "work/$RUN.bam" -
+            samtools index "work/$RUN.bam"
+            samtools flagstat "work/$RUN.bam" > "results/${RUN}_flagstat.txt"
+
+            for S in 0 1 2; do
+              featureCounts -T 4 -a ref/genes.gtf -o "counts/${RUN}_s${S}.txt" -t exon -g gene_id -s "$S" "work/$RUN.bam" \
+                >"results/${RUN}_featureCounts_s${S}.log" 2>&1
+            done
+
+            rm -f "raw/$RUN.sra" "work/$RUN.fastq" "work/$RUN.bam" "work/$RUN.bam.bai"
+            df -h . | tail -n 1
+          done
+
+      - name: Combine counts and inspect ERF1 across strand modes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv, glob, os
+          from collections import OrderedDict
+          meta=list(csv.DictReader(open('results/sample_sheet.csv')))
+          runs=[r['run'] for r in meta]
+          for s in (0,1,2):
+              genes=OrderedDict()
+              for run in runs:
+                  p=f'counts/{run}_s{s}.txt'
+                  with open(p) as f:
+                      rows=[x for x in f if not x.startswith('#')]
+                  rr=list(csv.DictReader(rows, delimiter='\t'))
+                  for row in rr:
+                      gid=row['Geneid']
+                      genes.setdefault(gid,{})[run]=int(row[list(row.keys())[-1]])
+              out=f'results/counts_s{s}.csv'
+              with open(out,'w',newline='') as f:
+                  w=csv.writer(f); w.writerow(['gene_id']+runs)
+                  for gid,d in genes.items(): w.writerow([gid]+[d.get(r,0) for r in runs])
+
+          target='AT3G23240'
+          with open('results/ERF1_raw_counts_all_strands.csv','w',newline='') as f:
+              w=csv.writer(f); w.writerow(['run','gsm','treatment','time_h','replicate','strand_mode','ERF1_count'])
+              for s in (0,1,2):
+                  vals={}
+                  for row in csv.DictReader(open(f'results/counts_s{s}.csv')):
+                      if row['gene_id'].upper()==target:
+                          vals=row; break
+                  for m in meta:
+                      w.writerow([m['run'],m['gsm'],m['treatment'],m['time_h'],m['replicate'],s, vals.get(m['run'],'NA') if vals else 'NA'])
+
+          with open('results/featureCounts_assignment_summary.csv','w',newline='') as f:
+              w=csv.writer(f); w.writerow(['run','strand_mode','assigned','total','assigned_fraction'])
+              for run in runs:
+                  for s in (0,1,2):
+                      p=f'counts/{run}_s{s}.txt.summary'
+                      rows=list(csv.reader(open(p), delimiter='\t'))
+                      d={r[0]:int(r[1]) for r in rows[1:] if len(r)>1}
+                      total=sum(d.values()); assigned=d.get('Assigned',0)
+                      w.writerow([run,s,assigned,total,assigned/total if total else ''])
+          PY
+
+      - name: Run edgeR on raw-read-derived unstranded counts
+        run: |
+          set -euo pipefail
+          cat > results/edger_recount.R <<'RS'
+          suppressPackageStartupMessages(library(edgeR))
+          meta <- read.csv('results/sample_sheet.csv', stringsAsFactors=FALSE)
+          x <- read.csv('results/counts_s0.csv', row.names=1, check.names=FALSE)
+          x <- as.matrix(x[, meta$run, drop=FALSE])
+          storage.mode(x) <- 'integer'
+          group <- factor(paste(meta$treatment, paste0(meta$time_h,'h'), sep='_'),
+                          levels=c('Mock_1h','MeJA_1h','Mock_5h','MeJA_5h','Mock_8h','MeJA_8h'))
+          y0 <- DGEList(counts=x, group=group)
+          cpm0 <- cpm(y0)
+          write.csv(cpm0, 'results/cpm_unfiltered.csv')
+          keep <- filterByExpr(y0, group=group)
+          write.csv(data.frame(gene_id=rownames(y0), keep=keep, row.names=NULL), 'results/filterByExpr_status.csv', row.names=FALSE)
+          y <- y0[keep,,keep.lib.sizes=FALSE]
+          y <- calcNormFactors(y)
+          design <- model.matrix(~0+group)
+          colnames(design) <- levels(group)
+          y <- estimateDisp(y, design)
+          fit <- glmQLFit(y, design, robust=TRUE)
+          contrasts <- list(
+            MeJA1h_vs_Mock1h=c(-1,1,0,0,0,0),
+            MeJA5h_vs_Mock5h=c(0,0,-1,1,0,0),
+            MeJA8h_vs_Mock8h=c(0,0,0,0,-1,1)
+          )
+          targets <- c(VSP1='AT5G24780',VSP2='AT5G24770',LOX2='AT3G45140',JAZ10='AT5G13220',MYC2='AT1G32640',PDF1.2='AT5G44420',ORA59='AT1G06160',ERF1='AT3G23240')
+          all_target <- data.frame()
+          for (nm in names(contrasts)) {
+            qlf <- glmQLFTest(fit, contrast=contrasts[[nm]])
+            tab <- topTags(qlf, n=Inf, sort.by='none')$table
+            tab$gene_id <- rownames(tab)
+            tab$FDR_genome <- p.adjust(tab$PValue, method='BH')
+            write.csv(tab, paste0('results/edgeR_',nm,'_full.csv'), row.names=FALSE)
+            z <- data.frame(gene=names(targets), gene_id=unname(targets), contrast=nm, stringsAsFactors=FALSE)
+            z$filtered_in <- z$gene_id %in% rownames(tab)
+            z$logFC <- NA_real_; z$logCPM <- NA_real_; z$PValue <- NA_real_; z$FDR_genome <- NA_real_
+            for (i in seq_len(nrow(z))) if (z$filtered_in[i]) {
+              rr <- tab[z$gene_id[i],]
+              z$logFC[i] <- rr$logFC; z$logCPM[i] <- rr$logCPM; z$PValue[i] <- rr$PValue; z$FDR_genome[i] <- rr$FDR_genome
+            }
+            z$FDR_panel <- p.adjust(z$PValue, method='BH')
+            all_target <- rbind(all_target,z)
+          }
+          write.csv(all_target,'results/target_panel_edgeR_raw_recount.csv',row.names=FALSE)
+          erf <- 'AT3G23240'
+          erf_counts <- if (erf %in% rownames(x)) x[erf,] else rep(NA,ncol(x))
+          erf_cpm <- if (erf %in% rownames(cpm0)) cpm0[erf,] else rep(NA,ncol(x))
+          e <- cbind(meta, raw_count=as.numeric(erf_counts), CPM=as.numeric(erf_cpm))
+          write.csv(e,'results/ERF1_unstranded_counts_CPM.csv',row.names=FALSE)
+          RS
+          Rscript results/edger_recount.R
+
+      - name: Compare with deposited GSE90077 count matrix
+        run: |
+          set -euo pipefail
+          rclone copyto "agri:PUBLIC_OMICS/ARABIDOPSIS/PROCESSED_REFERENCE/GEO_GSE90077/GSE90077_JBM_counts.txt.gz" \
+            results/GSE90077_JBM_counts.txt.gz --retries 5 --low-level-retries 10
+          gzip -dc results/GSE90077_JBM_counts.txt.gz | head -n 5 > results/deposited_matrix_head.txt
+          gzip -dc results/GSE90077_JBM_counts.txt.gz | grep -i -E 'AT3G23240|AT5G24780|AT5G24770|AT3G45140|AT5G13220|AT1G32640|AT5G44420|AT1G06160' \
+            > results/deposited_target_rows.txt || true
+          gzip -dc results/GSE90077_JBM_counts.txt.gz | grep -i -E 'AT3G23240|ERF1' > results/deposited_ERF1_rows.txt || true
+          rm -f results/GSE90077_JBM_counts.txt.gz
+
+      - name: Write audit and upload analysis to agriculture Drive
+        run: |
+          set -euo pipefail
+          REL=$(cat ref/ensembl_plants_release.txt)
+          {
+            echo '# GSE90077 raw-read ERF1 recount audit'
+            echo
+            echo "- GitHub SHA: $GITHUB_SHA"
+            echo "- Ensembl Plants release: $REL"
+            echo '- Raw inputs: 12 SRA runs from AGRICULTURE_RESEARCH_DATA only'
+            echo '- Alignment: HISAT2 against TAIR10 genomic reference'
+            echo '- Counting: featureCounts at exon/gene_id level, strand modes 0/1/2 retained'
+            echo '- Primary DE sensitivity analysis: unstranded counts, edgeR QL with TMM normalization and filterByExpr'
+            echo '- Raw SRA files were read from the separate agriculture Drive root; no agricultural data were written to the management-science lake.'
+            echo
+            echo '## Software'
+            hisat2 --version | head -n 1
+            samtools --version | head -n 1
+            featureCounts -v 2>&1 | head -n 1 || true
+            Rscript -e 'cat("R ",R.version.string,"; edgeR ",as.character(packageVersion("edgeR")),"\n")'
+          } > results/RAW_RECOUNT_AUDIT.md
+
+          DEST='PUBLIC_OMICS/ARABIDOPSIS/ANALYSIS/GSE90077_ERF1_RAW_RECOUNT_V1'
+          rclone copy results/ "agri:$DEST" --checksum --retries 5 --low-level-retries 10
+          REFDEST="PUBLIC_OMICS/ARABIDOPSIS/REFERENCE/TAIR10_ENSEMBL_PLANTS_RELEASE_${REL}"
+          rclone copy ref/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz "agri:$REFDEST" --checksum --retries 5 --low-level-retries 10
+          rclone copy ref/Arabidopsis_thaliana.TAIR10.gtf.gz "agri:$REFDEST" --checksum --retries 5 --low-level-retries 10
+          rclone lsl "agri:$DEST" | tee results/drive_result_listing.txt
+          rclone copyto results/drive_result_listing.txt "agri:$DEST/drive_result_listing.txt" --retries 5 --low-level-retries 10
+
+      - name: Upload compact analysis artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agriculture-gse90077-erf1-raw-recount
+          path: results/
+          retention-days: 90
+          if-no-files-found: error
