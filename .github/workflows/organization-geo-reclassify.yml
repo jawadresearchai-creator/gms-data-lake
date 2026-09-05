@@ -1,0 +1,64 @@
+name: Reclassify SEC OpenAlex Organization Links with Geography
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reclassify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt pandas
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+      - name: Stage identity and geography inputs
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input out
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/SEC_ISSUER_METADATA/part-0000.parquet input/SEC_ISSUER_METADATA.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/PRODUCTION_BRIDGE.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/SEC_OPENALEX_ORG_QUARANTINE/part-0000.parquet input/QUARANTINE.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/SEC_OPENALEX_ORG_REVIEW_QUEUE/part-0000.parquet input/REVIEW_QUEUE.parquet --stats 0
+      - name: Reclassify and publish
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m gmsdl.analytics.organization_geo_reclassify \
+            --issuer-metadata input/SEC_ISSUER_METADATA.parquet \
+            --production-bridge input/PRODUCTION_BRIDGE.parquet \
+            --quarantine input/QUARANTINE.parquet \
+            --review-queue input/REVIEW_QUEUE.parquet \
+            --out-dir out
+          rclone copyto out/SEC_OPENALEX_ORG_GEO_RECLASSIFICATION.parquet \
+            gdrive:03_RESEARCH/cross_domain/v2/SEC_OPENALEX_ORG_GEO_RECLASSIFICATION/part-0000.parquet --stats 0
+          rclone copyto out/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE_V2.parquet \
+            gdrive:03_RESEARCH/cross_domain/v2/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet --stats 0
+          rclone copyto out/organization_geo_reclassification_manifest.json \
+            gdrive:00_CONTROL/analytics/cross_domain/organization_geo_reclassification_manifest.json --stats 0
+          cat out/organization_geo_reclassification_manifest.json
