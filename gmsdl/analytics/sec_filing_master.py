@@ -32,7 +32,7 @@ class Filing:
 
     @property
     def canonical_filing_id(self) -> str:
-        return f"SEC_ACCESSION:{self.accession_nodash}"
+        return f"SEC_CIK_ACCESSION:{self.cik}:{self.accession_nodash}"
 
     @property
     def canonical_company_id(self) -> str:
@@ -146,16 +146,14 @@ def build_filing_master(index_paths: list[Path], company_master: Path, out_dir: 
         ''')
 
         duplicate_filing = int(con.execute('SELECT COUNT(*)-COUNT(DISTINCT canonical_filing_id) FROM filing_master').fetchone()[0])
-        duplicate_accession = int(con.execute('SELECT COUNT(*)-COUNT(DISTINCT accession_nodash) FROM filing_master').fetchone()[0])
         duplicate_cik = int(con.execute('SELECT COUNT(*)-COUNT(DISTINCT cik) FROM filing_master').fetchone()[0])
         null_keys = int(con.execute("SELECT COUNT(*) FROM filing_master WHERE canonical_filing_id IS NULL OR canonical_filing_id='' OR cik IS NULL OR cik='' OR accession_nodash IS NULL OR accession_nodash='' ").fetchone()[0])
         matched = int(con.execute('SELECT COUNT(*) FROM company_filing_bridge WHERE matched_company_master').fetchone()[0])
         unmatched = len(filings) - matched
 
-        if duplicate_filing or duplicate_accession or duplicate_cik or null_keys:
+        if duplicate_filing or duplicate_cik or null_keys:
             raise RuntimeError(
-                f'filing QA failed: duplicate_filing={duplicate_filing} duplicate_accession={duplicate_accession} '
-                f'duplicate_cik={duplicate_cik} null_keys={null_keys}'
+                f'filing QA failed: duplicate_filing={duplicate_filing} duplicate_cik={duplicate_cik} null_keys={null_keys}'
             )
 
         filing_path = out_dir / 'FILING_MASTER.parquet'
@@ -176,13 +174,14 @@ def build_filing_master(index_paths: list[Path], company_master: Path, out_dir: 
         'filing_rows': len(filings),
         'unique_ciks': len({f.cik for f in filings}),
         'unique_accessions': len({f.accession_nodash for f in filings}),
+        'shared_accession_rows': len(filings) - len({f.accession_nodash for f in filings}),
         'company_master_matches': matched,
         'company_master_unmatched': unmatched,
         'source_indexes': [
             {'name': p.name, 'bytes': p.stat().st_size, 'sha256': _sha256(p)} for p in index_paths
         ],
         'key_contract': {
-            'canonical_filing_id': 'SEC_ACCESSION:<accession-without-dashes>',
+            'canonical_filing_id': 'SEC_CIK_ACCESSION:<10-digit-CIK>:<accession-without-dashes>',
             'canonical_company_id': 'SEC_CIK:<10-digit-zero-padded-CIK>',
             'bridge_key': ['canonical_company_id', 'canonical_filing_id'],
         },
