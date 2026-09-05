@@ -1,0 +1,56 @@
+name: Verify OpenAlex Research Marts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Stage final marts and validate
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p marts report
+          for mart in WORK_YEAR_METRICS WORK_YEAR_TOPIC WORK_YEAR_INSTITUTION WORK_YEAR_COUNTRY COUNTRY_COLLAB_YEAR; do
+            mkdir -p "marts/$mart"
+            rclone copyto \
+              "gdrive:03_RESEARCH/openalex/v1/marts/$mart/part-0000.parquet" \
+              "marts/$mart/part-0000.parquet" --stats 0
+          done
+
+          python -m gmsdl.analytics.openalex_mart_validate \
+            --root marts \
+            --output report/openalex_mart_validation.json
+
+          rclone copyto report/openalex_mart_validation.json \
+            gdrive:00_CONTROL/analytics/openalex/marts/openalex_mart_validation.json \
+            --stats 0
+
+          cat report/openalex_mart_validation.json
