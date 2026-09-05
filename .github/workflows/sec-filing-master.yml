@@ -1,0 +1,86 @@
+name: Build SEC Filing Master
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Download frozen SEC quarterly indexes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input
+          ua='GMS Data Lake jawadresearch.ai@gmail.com'
+          for spec in '2023 1' '2023 2' '2023 3' '2023 4' '2024 1'; do
+            set -- $spec
+            y="$1"; q="$2"
+            curl -fL --retry 5 --retry-all-errors \
+              -A "$ua" \
+              "https://www.sec.gov/Archives/edgar/full-index/$y/QTR$q/master.idx" \
+              -o "input/master_${y}_q${q}.idx"
+          done
+
+      - name: Stage canonical company master
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        run: |
+          rclone copyto \
+            gdrive:03_RESEARCH/cross_domain/v1/COMPANY_MASTER/part-0000.parquet \
+            input/COMPANY_MASTER.parquet --stats 0
+
+      - name: Build and publish filing master
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m gmsdl.analytics.sec_filing_master \
+            --index input/master_2023_q1.idx \
+            --index input/master_2023_q2.idx \
+            --index input/master_2023_q3.idx \
+            --index input/master_2023_q4.idx \
+            --index input/master_2024_q1.idx \
+            --company-master input/COMPANY_MASTER.parquet \
+            --out-dir out \
+            --expected-filings 7361
+
+          rclone copyto out/FILING_MASTER.parquet \
+            gdrive:03_RESEARCH/cross_domain/v1/FILING_MASTER/part-0000.parquet --stats 0
+          rclone copyto out/COMPANY_FILING_BRIDGE.parquet \
+            gdrive:03_RESEARCH/cross_domain/v1/COMPANY_FILING_BRIDGE/part-0000.parquet --stats 0
+          rclone copyto out/filing_master_manifest.json \
+            gdrive:00_CONTROL/analytics/cross_domain/filing_master_manifest.json --stats 0
+
+          cat out/filing_master_manifest.json
