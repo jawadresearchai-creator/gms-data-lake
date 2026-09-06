@@ -1,0 +1,40 @@
+name: Compare Company Research v2 v3
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+      - name: Compare v2 and v3 company research
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v2/COMPANY_RESEARCH_YEAR/part-0000.parquet input/v2.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v3/COMPANY_RESEARCH_YEAR/part-0000.parquet input/v3.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v3/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/v3_bridge.parquet --stats 0
+          python -m gmsdl.analytics.company_research_delta --v2 input/v2.parquet --v3 input/v3.parquet --v3-bridge input/v3_bridge.parquet
