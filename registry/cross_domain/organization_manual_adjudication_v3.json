@@ -1,0 +1,55 @@
+{
+  "version": "v3",
+  "reviewed_at": "2026-09-06",
+  "policy": "Manual adjudication requires independent evidence beyond name similarity. Group/facility ambiguity blocks promotion.",
+  "items": [
+    {
+      "canonical_company_id": "SEC_CIK:0001549107",
+      "sec_name": "Manchester United plc",
+      "openalex_name": "Manchester United PLC",
+      "ror": "https://ror.org/03vfea898",
+      "decision": "PROMOTE",
+      "reason": "SEC CIK, legal name, UK location, and ROR identity all converge on the same legal entity; OpenAlex type=other is treated as a taxonomy issue rather than an identity contradiction.",
+      "evidence": [
+        "SEC CIK 0001549107 identifies Manchester United plc with principal executive offices in Manchester, United Kingdom.",
+        "Wikidata item Q99872290 for Manchester United plc lists CIK 0001549107 and ROR 03vfea898."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001089113",
+      "sec_name": "HSBC HOLDINGS PLC",
+      "openalex_name": "HSBC Holdings",
+      "ror": "https://ror.org/02ygdtt22",
+      "decision": "PROMOTE",
+      "reason": "SEC CIK, legal name, UK location, and ROR identity converge on HSBC Holdings plc; OpenAlex type=other is not treated as an identity contradiction.",
+      "evidence": [
+        "SEC CIK 0001089113 identifies HSBC HOLDINGS PLC at 8 Canada Square, London, United Kingdom.",
+        "Wikidata item Q190464 identifies HSBC Holdings plc and lists ROR 02ygdtt22."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001106861",
+      "sec_name": "CS DIAGNOSTICS CORP.",
+      "openalex_name": "CS Diagnostics",
+      "ror": "https://ror.org/04dqgsa85",
+      "decision": "KEEP_REVIEW",
+      "reason": "Country and name evidence are strong, but OpenAlex/ROR classifies the record as a facility and public evidence describes a multi-entity CS Group. Exact ROR-to-SEC-legal-entity identity is not sufficiently established.",
+      "evidence": [
+        "SEC CIK 0001106861 identifies CS DIAGNOSTICS CORP. with a German principal place of business.",
+        "SEC company materials describe CS Diagnostics Corp. as one member of a broader CS Group that includes German and other entities."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000891478",
+      "sec_name": "Banco Santander, S.A.",
+      "openalex_name": "Banco Santander (Spain)",
+      "ror": "https://ror.org/017d1hs72",
+      "decision": "KEEP_REVIEW",
+      "reason": "Country, name, company type, and ROR evidence are strong, but ROR 017d1hs72 is also associated with Santander Group. This creates a possible group-versus-legal-entity conflation that should not be promoted automatically.",
+      "evidence": [
+        "SEC CIK 0000891478 identifies Banco Santander, S.A. in Spain.",
+        "ROR 017d1hs72 is used for Banco Santander/Santander Group in external metadata, creating a possible scope mismatch with the SEC legal entity."
+      ]
+    }
+  ]
+}
