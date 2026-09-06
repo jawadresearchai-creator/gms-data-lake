@@ -1,0 +1,80 @@
+{
+  "version": "v5",
+  "reviewed_at": "2026-09-06",
+  "policy": "Promote only where SEC legal-entity identity and independent organization identifiers/official identity converge. Non-corporate OpenAlex type alone is not a blocker if the underlying legal entity is demonstrably identical.",
+  "items": [
+    {
+      "canonical_company_id": "SEC_CIK:0001856491",
+      "sec_name": "Clover Biopharmaceuticals, Ltd.",
+      "openalex_name": "Clover Biopharmaceuticals (China)",
+      "ror": "https://ror.org/021xwy741",
+      "decision": "PROMOTE",
+      "reason": "SEC and Clover corporate materials identify the same Clover Biopharmaceuticals enterprise with principal operations in China; the ROR-linked organization uses the same corporate identity and official site. Country and company-type evidence also agree.",
+      "evidence": [
+        "SEC Form D for CIK 0001856491 names Clover Biopharmaceuticals, Ltd. and gives Chengdu, China as principal place of business.",
+        "Clover corporate materials identify Clover Biopharmaceuticals, Ltd. with its principal place of business in the PRC.",
+        "ROR 021xwy741 is linked to the Clover Biopharmaceuticals corporate identity and official website."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001000275",
+      "sec_name": "ROYAL BANK OF CANADA",
+      "openalex_name": "Royal Bank of Canada",
+      "ror": "https://ror.org/03hgnwx26",
+      "decision": "PROMOTE",
+      "reason": "Exact SEC legal name and Canadian legal entity match; independent identity metadata links CIK 0001000275 and ROR 03hgnwx26 to Royal Bank of Canada.",
+      "evidence": [
+        "SEC Form 40-F names Royal Bank of Canada as the exact registrant, incorporated in Canada and headquartered in Toronto.",
+        "Independent identity metadata for Royal Bank of Canada lists both CIK 0001000275 and ROR 03hgnwx26."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001376986",
+      "sec_name": "Tennessee Valley Authority",
+      "openalex_name": "Tennessee Valley Authority",
+      "ror": "https://ror.org/01y6jsg53",
+      "decision": "PROMOTE",
+      "reason": "The SEC registrant and ROR/OpenAlex organization are the same federally owned Tennessee Valley Authority. OpenAlex type=government accurately describes the entity and is not an identity mismatch.",
+      "evidence": [
+        "SEC Form 10-K names Tennessee Valley Authority as the exact registrant and a corporate agency of the United States created by Congress.",
+        "Independent identity metadata links Tennessee Valley Authority to ROR 01y6jsg53 and the same Knoxville headquarters/official website."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000070318",
+      "sec_name": "TENET HEALTHCARE CORP",
+      "openalex_name": "Tenet Healthcare",
+      "ror": "https://ror.org/02bz1zq28",
+      "decision": "PROMOTE",
+      "reason": "SEC legal entity and independent corporate identifiers converge on Tenet Healthcare Corporation; the OpenAlex healthcare type reflects sector classification rather than a different legal entity.",
+      "evidence": [
+        "SEC Form 10-K names TENET HEALTHCARE CORPORATION as the exact registrant with headquarters in Dallas, Texas.",
+        "Independent identity metadata for Tenet Healthcare links the company to ROR 02bz1zq28 and the same official corporate website."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000071691",
+      "sec_name": "NEW YORK TIMES CO",
+      "openalex_name": "New York Times",
+      "ror": "https://ror.org/011w6k548",
+      "decision": "PROMOTE",
+      "reason": "SEC, OpenAlex/ROR, and independent corporate identifiers converge on The New York Times Company. The shortened OpenAlex display name does not create a legal-entity ambiguity.",
+      "evidence": [
+        "SEC Form 10-K names THE NEW YORK TIMES COMPANY as the exact registrant at 620 Eighth Avenue, New York.",
+        "Independent identity metadata for The New York Times Company links ROR 011w6k548 and OpenAlex organization identity to the same public company."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000107833",
+      "sec_name": "WISCONSIN PUBLIC SERVICE CORP",
+      "openalex_name": "Wisconsin Public Service",
+      "ror": "https://ror.org/04zhxv661",
+      "decision": "KEEP_REVIEW",
+      "reason": "SEC legal identity is clear, but independent ROR-level evidence tying 04zhxv661 specifically to Wisconsin Public Service Corporation rather than a broader utility/service identity is not yet sufficient.",
+      "evidence": [
+        "SEC Form 10-K names WISCONSIN PUBLIC SERVICE CORPORATION as the exact registrant, a Wisconsin corporation headquartered in Green Bay.",
+        "The OpenAlex candidate has a near-exact name and U.S. geography but is classified as government, so exact scope still needs independent confirmation."
+      ]
+    }
+  ]
+}
