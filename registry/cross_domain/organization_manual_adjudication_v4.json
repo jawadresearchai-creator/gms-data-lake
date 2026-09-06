@@ -1,0 +1,33 @@
+{
+  "version": "v4",
+  "reviewed_at": "2026-09-06",
+  "policy": "Legal-entity scope must match. Same-name group, facility, subsidiary, or operating-unit records are not promoted to an SEC registrant unless independent evidence establishes exact identity.",
+  "items": [
+    {
+      "canonical_company_id": "SEC_CIK:0001106861",
+      "sec_name": "CS DIAGNOSTICS CORP.",
+      "openalex_name": "CS Diagnostics",
+      "ror": "https://ror.org/04dqgsa85",
+      "decision": "REJECT",
+      "reason": "The SEC registrant is a Wyoming U.S. corporation with a U.S. principal executive office, while the OpenAlex/ROR candidate is a German facility. The records are related by name/business context but do not represent the same legal entity.",
+      "evidence": [
+        "SEC 2025 Form 10-K identifies CS Diagnostics Corp. as a Wyoming corporation and U.S.-based corporation, with principal executive offices at 1603 Capitol Avenue, Suite 413, Cheyenne, Wyoming 82001.",
+        "The CS Diagnostics website imprint identifies CS Diagnostics Pharma GmbH in Bruckmuehl, Germany, demonstrating a distinct German legal entity within the CS Diagnostics business family.",
+        "OpenAlex classifies the candidate as institution_type=facility and country=DE."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000891478",
+      "sec_name": "Banco Santander, S.A.",
+      "openalex_name": "Banco Santander (Spain)",
+      "ror": "https://ror.org/017d1hs72",
+      "decision": "KEEP_REVIEW",
+      "reason": "SEC and Santander identify Banco Santander, S.A. as the Spanish legal parent company of Santander Group, while ROR 017d1hs72 is also used for Santander Group. The candidate may represent the parent legal entity or the broader consolidated group; scope is not sufficiently disambiguated for production promotion.",
+      "evidence": [
+        "SEC CIK 0000891478 identifies Banco Santander, S.A. in Spain.",
+        "Santander official corporate information states Banco Santander, S.A. is the parent company of Grupo Santander and provides LEI 5493006QMFDDMYWIAM13.",
+        "External ROR-linked metadata maps 017d1hs72 to Banco Santander/Santander Group, creating a parent-versus-group scope ambiguity."
+      ]
+    }
+  ]
+}
