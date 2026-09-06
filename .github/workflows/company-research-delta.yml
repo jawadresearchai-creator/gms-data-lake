@@ -1,4 +1,4 @@
-name: Compare Company Research v2 v3
+name: Compare Company Research Baseline to Candidate
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
         run: |
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
-      - name: Compare v2 and v3 company research
+      - name: Compare v3 and v5 company research
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -34,7 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p input
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v2/COMPANY_RESEARCH_YEAR/part-0000.parquet input/v2.parquet --stats 0
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v3/COMPANY_RESEARCH_YEAR/part-0000.parquet input/v3.parquet --stats 0
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v3/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/v3_bridge.parquet --stats 0
-          python -m gmsdl.analytics.company_research_delta --v2 input/v2.parquet --v3 input/v3.parquet --v3-bridge input/v3_bridge.parquet
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v3/COMPANY_RESEARCH_YEAR/part-0000.parquet input/base.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v5/COMPANY_RESEARCH_YEAR/part-0000.parquet input/candidate.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v5/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/candidate_bridge.parquet --stats 0
+          python -m gmsdl.analytics.company_research_delta \
+            --base input/base.parquet \
+            --candidate input/candidate.parquet \
+            --candidate-bridge input/candidate_bridge.parquet
