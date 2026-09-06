@@ -1,0 +1,46 @@
+name: Rank Unresolved Organization Candidates
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rank:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+      - name: Rank unresolved candidates
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input out
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v2/SEC_OPENALEX_ORG_GEO_RECLASSIFICATION/part-0000.parquet input/RECLASSIFICATION.parquet --stats 0
+          python -m gmsdl.analytics.organization_unresolved_rank \
+            --reclassification input/RECLASSIFICATION.parquet \
+            --adjudication-v3 registry/cross_domain/organization_manual_adjudication_v3.json \
+            --adjudication-v4 registry/cross_domain/organization_manual_adjudication_v4.json \
+            --out-dir out
+          rclone copyto out/SEC_OPENALEX_ORG_UNRESOLVED_RANKED.parquet gdrive:03_RESEARCH/cross_domain/v4/SEC_OPENALEX_ORG_UNRESOLVED_RANKED/part-0000.parquet --stats 0
+          rclone copyto out/SEC_OPENALEX_ORG_UNRESOLVED_RANKED.csv gdrive:03_RESEARCH/cross_domain/v4/SEC_OPENALEX_ORG_UNRESOLVED_RANKED/unresolved_ranked.csv --stats 0
+          rclone copyto out/organization_unresolved_rank_manifest.json gdrive:00_CONTROL/analytics/cross_domain/v4/organization_unresolved_rank_manifest.json --stats 0
+          cat out/organization_unresolved_rank_manifest.json
