@@ -1,0 +1,87 @@
+{
+  "version": "v6",
+  "reviewed_at": "2026-09-06",
+  "policy": "Promote only where SEC legal-entity identity and independent ROR-linked organization evidence converge. Brand, educational network, facility, or funder scope ambiguity remains under review. Clear geography/entity contradictions are rejected.",
+  "items": [
+    {
+      "canonical_company_id": "SEC_CIK:0000831001",
+      "sec_name": "CITIGROUP INC",
+      "openalex_name": "Citigroup",
+      "ror": "https://ror.org/032xgdx47",
+      "decision": "PROMOTE",
+      "reason": "SEC legal entity and independent identity metadata converge on Citigroup Inc.; ROR 032xgdx47 is explicitly associated with Citigroup.",
+      "evidence": [
+        "SEC identifies CIK 0000831001 as Citigroup Inc.",
+        "Independent Wikidata identity metadata for Citigroup lists ROR 032xgdx47."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000860730",
+      "sec_name": "HCA Healthcare, Inc.",
+      "openalex_name": "HCA Healthcare",
+      "ror": "https://ror.org/0237c2m81",
+      "decision": "PROMOTE",
+      "reason": "SEC legal entity, Nashville headquarters, corporate domain, and ROR identity all converge on HCA Healthcare, Inc.",
+      "evidence": [
+        "SEC Form 10-K identifies HCA Healthcare, Inc. as the registrant at One Park Plaza, Nashville, Tennessee.",
+        "ROR-linked metadata for 0237c2m81 identifies HCA Healthcare, uses hcahealthcare.com, and locates the organization in Nashville."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001673743",
+      "sec_name": "Hinge Health, Inc.",
+      "openalex_name": "Hinge Health",
+      "ror": "https://ror.org/00cztjn15",
+      "decision": "PROMOTE",
+      "reason": "SEC and independent clinical-registry metadata identify the same Hinge Health, Inc. legal organization and associate it directly with ROR 00cztjn15.",
+      "evidence": [
+        "SEC identifies CIK 0001673743 as Hinge Health, Inc., a Delaware corporation based in San Francisco.",
+        "ISRCTN records name Hinge Health, Inc. and explicitly assign ROR 00cztjn15 to that organization."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001285785",
+      "sec_name": "MOSAIC CO",
+      "openalex_name": "Mosaic",
+      "ror": "https://ror.org/02mfecp81",
+      "decision": "REJECT",
+      "reason": "The SEC registrant is The Mosaic Company in Florida, United States, while the OpenAlex/ROR candidate is a South African nonprofit. This is a same-name false positive.",
+      "evidence": [
+        "SEC identifies CIK 0001285785 as MOSAIC CO with business address in Tampa, Florida.",
+        "The candidate OpenAlex organization has country code ZA and nonprofit type."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000318833",
+      "sec_name": "TEAM INC",
+      "openalex_name": "TEAM",
+      "ror": "https://ror.org/048zxak11",
+      "decision": "KEEP_REVIEW",
+      "reason": "SEC legal identity is clear, but the generic OpenAlex/ROR label TEAM is too ambiguous to establish exact legal-entity identity without stronger independent ROR-domain/address evidence."
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000724445",
+      "sec_name": "BURZYNSKI RESEARCH INSTITUTE INC",
+      "openalex_name": "Burzynski Research Institute",
+      "ror": "https://ror.org/01dyffq73",
+      "decision": "KEEP_REVIEW",
+      "reason": "The name match is strong and SEC identity is clear, but independent ROR-level evidence tying the registry record specifically to the SEC corporation has not yet been established."
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000912766",
+      "sec_name": "LAUREATE EDUCATION, INC.",
+      "openalex_name": "Laureate Education",
+      "ror": "https://ror.org/013mz8190",
+      "decision": "KEEP_REVIEW",
+      "reason": "SEC identifies the public parent corporation, while external ROR-linked metadata describes Laureate International Universities / an education-provider network. Parent-company versus network scope is not sufficiently disambiguated."
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001261654",
+      "sec_name": "UNIVERSAL TECHNICAL INSTITUTE INC",
+      "openalex_name": "Universal Technical Institute",
+      "ror": "https://ror.org/019njds38",
+      "decision": "KEEP_REVIEW",
+      "reason": "SEC identifies the Delaware public parent corporation, while ROR-linked metadata describes the Scottsdale educational institution. Corporate-parent versus operating-institution scope remains ambiguous."
+    }
+  ]
+}
