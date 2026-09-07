@@ -1,4 +1,4 @@
-﻿name: Compare Company Research Baseline to Candidate
+name: Compare Company Research Baseline to Candidate
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
         run: |
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
-      - name: Compare v6 and v7 company research
+      - name: Compare v7 and v8 company research
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -34,13 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p input
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v6/COMPANY_RESEARCH_YEAR/part-0000.parquet input/base.parquet --stats 0
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v7/COMPANY_RESEARCH_YEAR/part-0000.parquet input/candidate.parquet --stats 0
-          rclone copyto gdrive:03_RESEARCH/cross_domain/v7/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/candidate_bridge.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v7/COMPANY_RESEARCH_YEAR/part-0000.parquet input/base.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v8/COMPANY_RESEARCH_YEAR/part-0000.parquet input/candidate.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v8/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/candidate_bridge.parquet --stats 0
           python -m gmsdl.analytics.company_research_delta \
-            --base input/base.parquet \
-            --candidate input/candidate.parquet \
-            --candidate-bridge input/candidate_bridge.parquet
-
-
-
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v7/COMPANY_RESEARCH_YEAR/part-0000.parquet input/base.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v8/COMPANY_RESEARCH_YEAR/part-0000.parquet input/candidate.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v8/SEC_OPENALEX_ORG_PRODUCTION_BRIDGE/part-0000.parquet input/candidate_bridge.parquet --stats 0
