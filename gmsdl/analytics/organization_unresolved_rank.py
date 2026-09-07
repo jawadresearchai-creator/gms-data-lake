@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -7,17 +7,20 @@ from pathlib import Path
 import duckdb
 
 
-def rank_unresolved(reclassification: Path, adjudication_v3: Path, adjudication_v4: Path, adjudication_v5: Path, out_dir: Path) -> dict:
+def rank_unresolved(reclassification: Path, adjudication_v3: Path, adjudication_v4: Path, adjudication_v5: Path, adjudication_v6: Path, out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     a3=json.loads(adjudication_v3.read_text(encoding='utf-8'))
     a4=json.loads(adjudication_v4.read_text(encoding='utf-8'))
     a5=json.loads(adjudication_v5.read_text(encoding='utf-8'))
+    a6=json.loads(adjudication_v6.read_text(encoding='utf-8'))
     final_decisions={}
     for item in a3.get('items',[]):
         final_decisions[item['canonical_company_id']]=item.get('decision')
     for item in a4.get('items',[]):
         final_decisions[item['canonical_company_id']]=item.get('decision')
     for item in a5.get('items',[]):
+        final_decisions[item['canonical_company_id']]=item.get('decision')
+    for item in a6.get('items',[]):
         final_decisions[item['canonical_company_id']]=item.get('decision')
     excluded={cid for cid,d in final_decisions.items() if d in {'PROMOTE','REJECT'}}
 
@@ -107,9 +110,10 @@ def main() -> int:
     p.add_argument('--adjudication-v3',type=Path,required=True)
     p.add_argument('--adjudication-v4',type=Path,required=True)
     p.add_argument('--adjudication-v5',type=Path,required=True)
+    p.add_argument('--adjudication-v6',type=Path,required=True)
     p.add_argument('--out-dir',type=Path,required=True)
     a=p.parse_args()
-    print(json.dumps(rank_unresolved(a.reclassification,a.adjudication_v3,a.adjudication_v4,a.adjudication_v5,a.out_dir),indent=2,sort_keys=True,default=str))
+    print(json.dumps(rank_unresolved(a.reclassification,a.adjudication_v3,a.adjudication_v4,a.adjudication_v5,a.adjudication_v6,a.out_dir),indent=2,sort_keys=True,default=str))
     return 0
 
 if __name__=='__main__':
