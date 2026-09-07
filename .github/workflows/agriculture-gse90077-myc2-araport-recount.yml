@@ -1,0 +1,234 @@
+name: Agriculture GSE90077 MYC2 Araport11 recount
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/agriculture-gse90077-myc2-araport-recount.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  recount:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      RCLONE_CONFIG_AGRI_TYPE: drive
+      RCLONE_CONFIG_AGRI_SCOPE: drive
+      RCLONE_CONFIG_AGRI_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_AGRI_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_AGRI_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_AGRI_ROOT_FOLDER_ID: 1nvqPV6Ko6X3eP7yQ9wwzBPy0NCkfjIOF
+      RAW_ROOT: PUBLIC_OMICS/ARABIDOPSIS/GSE90077_RAW_SRA
+      ANALYSIS_ROOT: PUBLIC_OMICS/ARABIDOPSIS/ANALYSIS/GSE90077_MYC2_ARAPORT_RECOUNT
+      REFERENCE_ROOT: PUBLIC_OMICS/ARABIDOPSIS/REFERENCE/TAIR10_ARAPORT11_20240331
+
+    steps:
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            sra-toolkit hisat2 samtools subread r-base r-bioc-edger curl ca-certificates gzip python3
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          hisat2 --version | head -n 1
+          featureCounts -v 2>&1 | head -n 1 || true
+          Rscript -e 'cat("edgeR ",as.character(packageVersion("edgeR")),"\n")'
+
+      - name: Fetch TAIR10 genome plus Ensembl and Araport11 annotations
+        run: |
+          set -euo pipefail
+          mkdir -p ref results work raw counts
+          FASTA_URL='https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-63/fasta/arabidopsis_thaliana/dna/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz'
+          ENS_GTF_URL='https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-63/gtf/arabidopsis_thaliana/Arabidopsis_thaliana.TAIR10.63.gtf.gz'
+          ARAPORT_GTF_URL='https://zenodo.org/records/15889083/files/Araport11_GTF_genes_transposons.20240331.gtf.gz?download=1'
+          curl -fL --retry 5 --retry-delay 2 "$FASTA_URL" -o ref/tair10.fa.gz
+          curl -fL --retry 5 --retry-delay 2 "$ENS_GTF_URL" -o ref/ensembl63.gtf.gz
+          curl -fL --retry 5 --retry-delay 2 "$ARAPORT_GTF_URL" -o ref/araport11_20240331.gtf.gz
+          test -s ref/tair10.fa.gz
+          test -s ref/ensembl63.gtf.gz
+          test -s ref/araport11_20240331.gtf.gz
+          sha256sum ref/*.gz > results/reference_sha256.txt
+          gzip -dc ref/tair10.fa.gz > ref/genome.fa
+          gzip -dc ref/ensembl63.gtf.gz > ref/ensembl63.gtf
+          gzip -dc ref/araport11_20240331.gtf.gz > ref/araport11.raw.gtf
+          python3 - <<'PY'
+          import re
+          src='ref/araport11.raw.gtf'; dst='ref/araport11.norm.gtf'
+          mp={'Chr1':'1','Chr2':'2','Chr3':'3','Chr4':'4','Chr5':'5','ChrC':'Pt','ChrM':'Mt'}
+          with open(src) as fi, open(dst,'w') as fo:
+              for line in fi:
+                  if line.startswith('#') or not line.strip():
+                      fo.write(line); continue
+                  p=line.rstrip('\n').split('\t')
+                  p[0]=mp.get(p[0],p[0])
+                  fo.write('\t'.join(p)+'\n')
+          PY
+          printf 'source,url\nTAIR10_FASTA,%s\nEnsembl63_GTF,%s\nAraport11_20240331_GTF,%s\n' "$FASTA_URL" "$ENS_GTF_URL" "$ARAPORT_GTF_URL" > results/reference_manifest.csv
+          grep -i 'AT1G32640' ref/ensembl63.gtf > results/MYC2_ensembl63_annotation.txt || true
+          grep -i 'AT1G32640' ref/araport11.norm.gtf > results/MYC2_araport11_annotation.txt || true
+          grep -i 'AT3G23240' ref/ensembl63.gtf > results/ERF1_ensembl63_annotation.txt || true
+          grep -i 'AT3G23240' ref/araport11.norm.gtf > results/ERF1_araport11_annotation.txt || true
+          echo 'FASTA headers:' > results/reference_header_audit.txt
+          grep '^>' ref/genome.fa | head -n 10 >> results/reference_header_audit.txt
+          echo 'Araport seqnames:' >> results/reference_header_audit.txt
+          awk '!/^#/{print $1}' ref/araport11.norm.gtf | sort -u | head -n 20 >> results/reference_header_audit.txt
+          hisat2-build -p 4 ref/genome.fa ref/tair10
+          rclone copy ref/tair10.fa.gz "agri:$REFERENCE_ROOT/" --checksum --retries 5 --low-level-retries 10
+          rclone copy ref/araport11_20240331.gtf.gz "agri:$REFERENCE_ROOT/" --checksum --retries 5 --low-level-retries 10
+          rclone copy results/reference_sha256.txt "agri:$REFERENCE_ROOT/" --checksum --retries 5 --low-level-retries 10
+          rclone copy results/reference_manifest.csv "agri:$REFERENCE_ROOT/" --checksum --retries 5 --low-level-retries 10
+
+      - name: Re-align 12 MeJA and Mock libraries and count against both annotations
+        run: |
+          set -euo pipefail
+          cat > results/sample_sheet.csv <<'EOF'
+          run,gsm,treatment,time_h,replicate,group
+          SRR5038590,GSM2397325,MeJA,1,1,MeJA1h
+          SRR5038591,GSM2397326,MeJA,1,2,MeJA1h
+          SRR5038592,GSM2397327,MeJA,5,1,MeJA5h
+          SRR5038593,GSM2397328,MeJA,5,2,MeJA5h
+          SRR5038594,GSM2397329,MeJA,8,1,MeJA8h
+          SRR5038595,GSM2397330,MeJA,8,2,MeJA8h
+          SRR5038602,GSM2397337,Mock,1,1,Mock1h
+          SRR5038603,GSM2397338,Mock,1,2,Mock1h
+          SRR5038604,GSM2397339,Mock,5,1,Mock5h
+          SRR5038605,GSM2397340,Mock,5,2,Mock5h
+          SRR5038606,GSM2397341,Mock,8,1,Mock8h
+          SRR5038607,GSM2397342,Mock,8,2,Mock8h
+          EOF
+          printf 'run,spots_written\n' > results/read_counts.csv
+          tail -n +2 results/sample_sheet.csv | while IFS=',' read -r RUN GSM TRT TIME REP GROUP; do
+            echo "=== $RUN $GSM $TRT ${TIME}h rep$REP ==="
+            rclone copyto "agri:$RAW_ROOT/$RUN.sra" "raw/$RUN.sra" --retries 5 --low-level-retries 10
+            test -s "raw/$RUN.sra"
+            vdb-validate "raw/$RUN.sra"
+            fasterq-dump "raw/$RUN.sra" --threads 4 --outdir work
+            READS=$(awk 'END{print NR/4}' "work/$RUN.fastq")
+            printf '%s,%s\n' "$RUN" "$READS" >> results/read_counts.csv
+            hisat2 -x ref/tair10 -U "work/$RUN.fastq" -p 4 --summary-file "results/${RUN}_hisat2_summary.txt" \
+              2>"results/${RUN}_hisat2_stderr.txt" | samtools sort -@ 2 -o "work/$RUN.bam" -
+            samtools flagstat "work/$RUN.bam" > "results/${RUN}_flagstat.txt"
+            featureCounts -T 4 -a ref/ensembl63.gtf -o "counts/${RUN}_ens.txt" -t exon -g gene_id -s 0 "work/$RUN.bam" >"results/${RUN}_featureCounts_ens.log" 2>&1
+            featureCounts -T 4 -a ref/araport11.norm.gtf -o "counts/${RUN}_ara.txt" -t exon -g gene_id -s 0 "work/$RUN.bam" >"results/${RUN}_featureCounts_ara.log" 2>&1
+            rm -f "raw/$RUN.sra" "work/$RUN.fastq" "work/$RUN.bam"
+          done
+
+      - name: Combine count matrices and compare MYC2/ERF1
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv,re
+          from collections import OrderedDict
+          meta=list(csv.DictReader(open('results/sample_sheet.csv'))); runs=[m['run'] for m in meta]
+          def combine(tag):
+              genes=OrderedDict()
+              for run in runs:
+                  with open(f'counts/{run}_{tag}.txt') as f:
+                      rows=[x for x in f if not x.startswith('#')]
+                  for row in csv.DictReader(rows, delimiter='\t'):
+                      gid=re.sub(r'\\.[0-9]+$','',row['Geneid'].strip('"'))
+                      genes.setdefault(gid,{})[run]=genes.setdefault(gid,{}).get(run,0)+int(row[list(row.keys())[-1]])
+              with open(f'results/counts_{tag}.csv','w',newline='') as f:
+                  w=csv.writer(f); w.writerow(['gene_id']+runs)
+                  for gid,d in genes.items(): w.writerow([gid]+[d.get(r,0) for r in runs])
+              return genes
+          ens=combine('ens'); ara=combine('ara')
+          targets={'MYC2':'AT1G32640','ERF1':'AT3G23240','VSP1':'AT5G24780','VSP2':'AT5G24770','LOX2':'AT3G45140','JAZ10':'AT5G13220','PDF1.2':'AT5G44420','ORA59':'AT1G06160'}
+          with open('results/annotation_count_comparison.csv','w',newline='') as f:
+              w=csv.writer(f); w.writerow(['gene','gene_id','run','ensembl_count','araport_count'])
+              for gene,gid in targets.items():
+                  for run in runs: w.writerow([gene,gid,run,ens.get(gid,{}).get(run,0),ara.get(gid,{}).get(run,0)])
+          PY
+
+      - name: edgeR analysis on Araport11 counts
+        run: |
+          set -euo pipefail
+          cat > results/edger_araport.R <<'RS'
+          suppressPackageStartupMessages(library(edgeR))
+          meta <- read.csv('results/sample_sheet.csv', stringsAsFactors=FALSE)
+          x <- read.csv('results/counts_ara.csv', row.names=1, check.names=FALSE)
+          x <- as.matrix(x[,meta$run,drop=FALSE]); storage.mode(x)<-'integer'
+          group <- factor(meta$group, levels=c('Mock1h','MeJA1h','Mock5h','MeJA5h','Mock8h','MeJA8h'))
+          y0 <- DGEList(counts=x, group=group); y0 <- calcNormFactors(y0, method='TMM')
+          cpm0 <- cpm(y0, normalized.lib.sizes=TRUE); write.csv(cpm0,'results/cpm_araport_unfiltered.csv')
+          keep <- filterByExpr(y0, group=group)
+          write.csv(data.frame(gene_id=rownames(y0),keep=keep),'results/filterByExpr_araport.csv',row.names=FALSE)
+          y <- y0[keep,,keep.lib.sizes=FALSE]; y <- calcNormFactors(y, method='TMM')
+          design <- model.matrix(~0+group); colnames(design)<-levels(group)
+          y <- estimateDisp(y,design,robust=TRUE); fit <- glmQLFit(y,design,robust=TRUE)
+          cons <- list(MeJA1h_vs_Mock1h=c(-1,1,0,0,0,0),MeJA5h_vs_Mock5h=c(0,0,-1,1,0,0),MeJA8h_vs_Mock8h=c(0,0,0,0,-1,1))
+          targets <- c(VSP1='AT5G24780',VSP2='AT5G24770',LOX2='AT3G45140',JAZ10='AT5G13220',MYC2='AT1G32640',PDF1.2='AT5G44420',ORA59='AT1G06160',ERF1='AT3G23240')
+          out <- data.frame()
+          for(nm in names(cons)){
+            q <- glmQLFTest(fit,contrast=cons[[nm]]); tab<-topTags(q,n=Inf,sort.by='none')$table; tab$gene_id<-rownames(tab); tab$FDR_genome<-p.adjust(tab$PValue,'BH')
+            z<-data.frame(gene=names(targets),gene_id=unname(targets),contrast=nm,filtered_in=unname(targets)%in%rownames(tab),logFC=NA_real_,logCPM=NA_real_,PValue=NA_real_,FDR_genome=NA_real_)
+            for(i in seq_len(nrow(z))) if(z$filtered_in[i]){rr<-tab[z$gene_id[i],]; z$logFC[i]<-rr$logFC;z$logCPM[i]<-rr$logCPM;z$PValue[i]<-rr$PValue;z$FDR_genome[i]<-rr$FDR_genome}
+            z$FDR_panel<-NA_real_; ok<-which(!is.na(z$PValue)); if(length(ok)) z$FDR_panel[ok]<-p.adjust(z$PValue[ok],'BH'); out<-rbind(out,z)
+            write.csv(tab,paste0('results/edgeR_araport_',nm,'_full.csv'),row.names=FALSE)
+          }
+          write.csv(out,'results/target_panel_edgeR_araport.csv',row.names=FALSE)
+          focus <- c('AT1G32640','AT3G23240')
+          ff <- data.frame()
+          for(g in focus){
+            vals <- if(g %in% rownames(x)) as.numeric(x[g,]) else rep(NA,ncol(x)); cp <- if(g %in% rownames(cpm0)) as.numeric(cpm0[g,]) else rep(NA,ncol(x))
+            ff<-rbind(ff,cbind(gene_id=g,meta,raw_count=vals,CPM=cp,passed_filter=if(g %in% rownames(y0)) keep[g] else FALSE))
+          }
+          write.csv(ff,'results/MYC2_ERF1_araport_counts_CPM.csv',row.names=FALSE)
+          sink('results/R_sessionInfo.txt'); sessionInfo(); sink()
+          RS
+          Rscript results/edger_araport.R
+
+      - name: Compare with deposited matrix and write resolution report
+        run: |
+          set -euo pipefail
+          rclone copyto "agri:PUBLIC_OMICS/ARABIDOPSIS/PROCESSED_REFERENCE/GEO_GSE90077/GSE90077_JBM_counts.txt.gz" results/deposited.gz --retries 5 --low-level-retries 10
+          python3 - <<'PY'
+          import csv,gzip,re,statistics
+          ids={'MYC2':'AT1G32640','ERF1':'AT3G23240'}
+          dep={}
+          with gzip.open('results/deposited.gz','rt',errors='replace') as f:
+              for line in f:
+                  for gene,gid in ids.items():
+                      if line.upper().startswith(gid): dep[gene]=line.rstrip('\n')
+          open('results/deposited_MYC2_ERF1_rows.txt','w').write('\n'.join(dep.values())+'\n')
+          rows=list(csv.DictReader(open('results/annotation_count_comparison.csv')))
+          meta=list(csv.DictReader(open('results/sample_sheet.csv')))
+          m={x['run']:x for x in meta}
+          def by_gene(gene,key):
+              return {r['run']:int(r[key]) for r in rows if r['gene']==gene}
+          report=['# GSE90077 MYC2 annotation-resolution recount','',
+                  'Twelve MeJA + matched Mock libraries were re-aligned to the same TAIR10 genome and counted against both Ensembl Plants release 63 GTF and the independent TAIR/Araport11 2024-03-31 GTF.','']
+          for gene in ['MYC2','ERF1']:
+              ens=by_gene(gene,'ensembl_count'); ara=by_gene(gene,'araport_count')
+              report += [f'## {gene}', '', '| Group | Ensembl counts | Araport11 counts |','|---|---|---|']
+              for grp in ['Mock1h','MeJA1h','Mock5h','MeJA5h','Mock8h','MeJA8h']:
+                  rr=[x['run'] for x in meta if x['group']==grp]
+                  report.append(f"| {grp} | {', '.join(str(ens[x]) for x in rr)} | {', '.join(str(ara[x]) for x in rr)} |")
+              report += ['',f'Deposited row: `{dep.get(gene,"not found")}`','']
+          ed=list(csv.DictReader(open('results/target_panel_edgeR_araport.csv')))
+          report += ['## Araport11 edgeR focus','', '| Gene | Contrast | Tested | log2FC | P | Panel FDR | Genome FDR |','|---|---|---|---:|---:|---:|---:|']
+          for r in ed:
+              if r['gene'] in ('MYC2','ERF1'):
+                  report.append(f"| {r['gene']} | {r['contrast']} | {r['filtered_in']} | {r['logFC'] or 'NA'} | {r['PValue'] or 'NA'} | {r['FDR_panel'] or 'NA'} | {r['FDR_genome'] or 'NA'} |")
+          report += ['', '## Interpretation rule', '', 'If Araport11 restores MYC2 counts while ERF1 remains near-zero, the prior MYC2 failure is an annotation-model incompatibility rather than absence of MYC2 signal. ERF1 remains interpretable only if it passes expression filtering. This is a public-data sensitivity analysis, not acetophenone-specific molecular evidence.']
+          open('results/GSE90077_MYC2_ARAPORT_RESOLUTION_REPORT.md','w').write('\n'.join(report)+'\n')
+          PY
+          rm -f results/deposited.gz
+
+      - name: Upload verified results to separate agriculture Drive
+        run: |
+          set -euo pipefail
+          rclone copy results "agri:$ANALYSIS_ROOT/" --checksum --retries 5 --low-level-retries 10
+          rclone lsl "agri:$ANALYSIS_ROOT/" > results/drive_verified_listing.txt
+          test -s results/drive_verified_listing.txt
+          grep -q 'GSE90077_MYC2_ARAPORT_RESOLUTION_REPORT.md' results/drive_verified_listing.txt
+          rclone copy results/drive_verified_listing.txt "agri:$ANALYSIS_ROOT/" --checksum --retries 5 --low-level-retries 10
+
+      - name: Upload compact artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agriculture-gse90077-myc2-araport-recount
+          path: results/
+          retention-days: 90
