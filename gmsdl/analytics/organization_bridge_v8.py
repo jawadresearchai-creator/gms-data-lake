@@ -49,7 +49,7 @@ def build_v8_bridge(v7_bridge: Path, reclassification: Path, adjudication: Path,
             raise RuntimeError(f'v8 bridge QA failed: duplicate_company={dup_company} duplicate_openalex={dup_inst} null_keys={null_keys}')
 
         out = out_dir / 'SEC_OPENALEX_ORG_PRODUCTION_BRIDGE_V8.parquet'
-        con.execute(f"COPY v7 TO '{out.as_posix()}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+        con.execute(f"COPY v8 TO '{out.as_posix()}' (FORMAT PARQUET, COMPRESSION ZSTD)")
     finally:
         con.close()
 
