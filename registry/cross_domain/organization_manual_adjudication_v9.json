@@ -1,0 +1,81 @@
+{
+  "version": "v9",
+  "reviewed_at": "2026-09-07",
+  "policy": "Promote only when SEC legal-entity identity and independent ROR-linked organization evidence converge. Country-specific affiliates, parent/subsidiary mismatches, and name-only false positives are rejected; group-versus-operating-entity ambiguity remains under review.",
+  "items": [
+    {
+      "canonical_company_id": "SEC_CIK:0002097163",
+      "sec_name": "Xanadu Quantum Technologies Ltd",
+      "openalex_name": "Xanadu Quantum Technologies (Canada)",
+      "ror": "https://ror.org/05qj0n416",
+      "decision": "PROMOTE",
+      "reason": "SEC identifies Xanadu Quantum Technologies Ltd as the Toronto-based Canadian technology company, and independent ROR-linked metadata identifies the same Xanadu Quantum Technologies organization with ROR 05qj0n416.",
+      "evidence": [
+        "SEC CIK 0002097163 identifies Xanadu Quantum Technologies Ltd at 777 Bay Street, Toronto, Canada.",
+        "Independent identity metadata identifies Xanadu Quantum Technologies/Xanadu, Inc. in Toronto, Canada with official website xanadu.ai and ROR 05qj0n416.",
+        "Published research affiliations use Xanadu Quantum Technologies Inc., Toronto, Canada with ROR 05qj0n416."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000097745",
+      "sec_name": "THERMO FISHER SCIENTIFIC INC.",
+      "openalex_name": "Thermo Fisher Scientific (Japan)",
+      "ror": "https://ror.org/00wg75m45",
+      "decision": "REJECT",
+      "reason": "The SEC registrant is the U.S. parent Thermo Fisher Scientific Inc., headquartered in Massachusetts and incorporated in Delaware, while the candidate is explicitly the Japan organization. This is a parent-versus-country-affiliate mismatch.",
+      "evidence": [
+        "SEC CIK 0000097745 identifies Thermo Fisher Scientific Inc. at 168 Third Avenue, Waltham, Massachusetts, state of incorporation Delaware.",
+        "The OpenAlex candidate is explicitly Thermo Fisher Scientific (Japan), country JP."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0002085208",
+      "sec_name": "Duality Biotherapeutics Inc/ADR",
+      "openalex_name": "Duality Biotherapeutics, Inc. (China)",
+      "ror": "https://ror.org/01gh8xc13",
+      "decision": "KEEP_REVIEW",
+      "reason": "The listed parent is a Cayman-incorporated company with substantial China operating subsidiaries, while ROR labels the record as Duality Biotherapeutics, Inc. (China). The record may represent the consolidated group or a China operating identity, so exact legal-entity scope is not yet sufficiently disambiguated.",
+      "evidence": [
+        "Duality Biotherapeutics, Inc. is an exempted Cayman Islands company.",
+        "Official corporate materials identify Shanghai, Suzhou, and Beijing operations in China.",
+        "ROR release metadata identifies 01gh8xc13 as Duality Biotherapeutics, Inc. (China)."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001552493",
+      "sec_name": "CNH Industrial Capital LLC",
+      "openalex_name": "CNH Industrial (Italy)",
+      "ror": "https://ror.org/047gams58",
+      "decision": "REJECT",
+      "reason": "The SEC registrant is a Delaware captive finance subsidiary headquartered in Wisconsin and indirectly owned by CNH Industrial N.V.; the candidate is the broader CNH Industrial organization in Italy. This is a subsidiary-versus-parent/group mismatch.",
+      "evidence": [
+        "SEC identifies CNH Industrial Capital LLC as a Delaware company headquartered in Waterford, Wisconsin.",
+        "SEC filings state CNH Industrial Capital LLC is an indirect wholly owned subsidiary of CNH Industrial N.V."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001658645",
+      "sec_name": "Stone Ridge Trust V",
+      "openalex_name": "Stonebridge Trust",
+      "ror": "https://ror.org/02w2g9n75",
+      "decision": "REJECT",
+      "reason": "Stone Ridge Trust V is a Delaware statutory investment trust; the candidate Stonebridge Trust is a different organization. This is a name-only false positive.",
+      "evidence": [
+        "SEC filings identify Stone Ridge Trust V, CIK 0001658645, as a Delaware registered investment trust.",
+        "The candidate name is Stonebridge Trust, not Stone Ridge Trust V."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001577916",
+      "sec_name": "Premier, Inc.",
+      "openalex_name": "Premiere",
+      "ror": "https://ror.org/00qd3m987",
+      "decision": "REJECT",
+      "reason": "The candidate is a Botswana organization named Premiere, while the SEC registrant is Premier, Inc. in the United States. Name, geography, and legal identity do not match.",
+      "evidence": [
+        "The candidate OpenAlex organization is Premiere, country BW.",
+        "The SEC registrant is Premier, Inc., a distinct U.S. legal entity."
+      ]
+    }
+  ]
+}
