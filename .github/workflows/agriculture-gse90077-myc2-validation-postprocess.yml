@@ -1,0 +1,111 @@
+name: Agriculture GSE90077 MYC2 validation postprocess
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/agriculture-gse90077-myc2-validation-postprocess.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RCLONE_CONFIG_AGRI_TYPE: drive
+      RCLONE_CONFIG_AGRI_SCOPE: drive
+      RCLONE_CONFIG_AGRI_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_AGRI_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_AGRI_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_AGRI_ROOT_FOLDER_ID: 1nvqPV6Ko6X3eP7yQ9wwzBPy0NCkfjIOF
+      ANALYSIS_ROOT: PUBLIC_OMICS/ARABIDOPSIS/ANALYSIS/GSE90077_MYC2_TARGETED_CORRECTION
+      DEPOSITED: PUBLIC_OMICS/ARABIDOPSIS/PROCESSED_REFERENCE/GEO_GSE90077/GSE90077_JBM_counts.txt.gz
+
+    steps:
+      - name: Install rclone
+        run: |
+          set -euo pipefail
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Fetch existing outputs and deposited matrix
+        run: |
+          set -euo pipefail
+          mkdir -p work results
+          rclone copyto "agri:$ANALYSIS_ROOT/MYC2_raw_vs_deposited.csv" work/raw_vs_deposited.csv --retries 5 --low-level-retries 10
+          rclone copyto "agri:$ANALYSIS_ROOT/sample_sheet.csv" work/sample_sheet.csv --retries 5 --low-level-retries 10
+          rclone copyto "agri:$DEPOSITED" work/deposited.gz --retries 5 --low-level-retries 10
+          test -s work/raw_vs_deposited.csv
+          test -s work/sample_sheet.csv
+          test -s work/deposited.gz
+
+      - name: Verify raw versus deposited MYC2 counts
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv,gzip,math,statistics
+
+          meta={r['run']:r for r in csv.DictReader(open('work/sample_sheet.csv'))}
+          raw=list(csv.DictReader(open('work/raw_vs_deposited.csv')))
+
+          with gzip.open('work/deposited.gz','rt',errors='replace') as f:
+              rows=[line.rstrip('\n').split('\t') for line in f]
+          labels=rows[0][1:]
+          target=None
+          for row in rows:
+              if row and row[0].upper()=='AT1G32640':
+                  target=[int(x) for x in row[1:]]
+                  break
+          if target is None:
+              raise SystemExit('MYC2 row not found')
+          dep=dict(zip(labels,target))
+
+          xs=[]; ys=[]; verified=[]
+          for r in raw:
+              m=meta[r['run']]
+              label=f"{m['treatment']}_{m['time_h']}h_rep{m['replicate']}"
+              if label not in dep:
+                  raise SystemExit(f'missing deposited label {label}')
+              d=dep[label]
+              o=int(r['overlap_O'])
+              pct=(o-d)/d*100 if d else float('nan')
+              rr=dict(r)
+              rr['deposited_label']=label
+              rr['deposited_count_verified']=d
+              rr['difference']=o-d
+              rr['pct_difference']=pct
+              verified.append(rr)
+              xs.append(o); ys.append(d)
+
+          mx=sum(xs)/len(xs); my=sum(ys)/len(ys)
+          num=sum((x-mx)*(y-my) for x,y in zip(xs,ys))
+          den=(sum((x-mx)**2 for x in xs)*sum((y-my)**2 for y in ys))**0.5
+          corr=num/den
+          mean_abs_pct=sum(abs(float(r['pct_difference'])) for r in verified)/len(verified)
+          max_abs_pct=max(abs(float(r['pct_difference'])) for r in verified)
+
+          fields=list(verified[0].keys())
+          with open('results/MYC2_raw_vs_deposited_verified.csv','w',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(verified)
+
+          with open('results/MYC2_RAW_VS_DEPOSITED_VERIFIED.md','w') as f:
+              f.write('# GSE90077 MYC2 raw-vs-deposited verification\n\n')
+              f.write('The original targeted-correction report returned r=nan because its GSM/header matching did not resolve the deposited matrix columns. This postprocess reads the deposited treatment/time/replicate labels directly and maps them to the 12 raw libraries via sample_sheet.csv.\n\n')
+              f.write(f'Overlap-aware raw MYC2 counts versus deposited MYC2 counts: Pearson r = {corr:.8f}. Mean absolute percent difference = {mean_abs_pct:.2f}%; maximum absolute percent difference = {max_abs_pct:.2f}%.\n\n')
+              f.write('This repairs the bookkeeping comparison only. It does not alter the targeted edgeR estimates or the conclusion that overlap-aware assignment independently recovers the deposited MYC2 response.\n')
+          print(f'Pearson r={corr:.8f}; mean_abs_pct={mean_abs_pct:.2f}; max_abs_pct={max_abs_pct:.2f}')
+          PY
+
+      - name: Upload verified comparison to separate agriculture Drive
+        run: |
+          set -euo pipefail
+          rclone copy results "agri:$ANALYSIS_ROOT/" --checksum --retries 5 --low-level-retries 10
+          rclone lsl "agri:$ANALYSIS_ROOT" | grep -E 'MYC2_raw_vs_deposited_verified.csv|MYC2_RAW_VS_DEPOSITED_VERIFIED.md'
+
+      - name: Upload compact artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agriculture-gse90077-myc2-validation-postprocess
+          path: results/
+          if-no-files-found: error
