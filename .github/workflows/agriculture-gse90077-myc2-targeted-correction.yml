@@ -1,0 +1,261 @@
+name: Agriculture GSE90077 MYC2 targeted correction
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/agriculture-gse90077-myc2-targeted-correction.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  correction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      RCLONE_CONFIG_AGRI_TYPE: drive
+      RCLONE_CONFIG_AGRI_SCOPE: drive
+      RCLONE_CONFIG_AGRI_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_AGRI_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_AGRI_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_AGRI_ROOT_FOLDER_ID: 1nvqPV6Ko6X3eP7yQ9wwzBPy0NCkfjIOF
+      RAW_ROOT: PUBLIC_OMICS/ARABIDOPSIS/GSE90077_RAW_SRA
+      OUT_ROOT: PUBLIC_OMICS/ARABIDOPSIS/ANALYSIS/GSE90077_MYC2_TARGETED_CORRECTION
+      REF_ROOT: PUBLIC_OMICS/ARABIDOPSIS/REFERENCE/TAIR10_ARAPORT11_20240331
+
+    steps:
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            sra-toolkit hisat2 samtools subread r-base r-bioc-edger curl ca-certificates gzip python3
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          hisat2 --version | head -n 1
+          featureCounts -v 2>&1 | head -n 1 || true
+          Rscript -e 'cat("edgeR ",as.character(packageVersion("edgeR")),"\n")'
+
+      - name: Fetch fixed TAIR10 genome and Araport11 annotation
+        run: |
+          set -euo pipefail
+          mkdir -p ref raw work counts results
+          FASTA_URL='https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-63/fasta/arabidopsis_thaliana/dna/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz'
+          ARAPORT_URL='https://zenodo.org/records/15889083/files/Araport11_GTF_genes_transposons.20240331.gtf.gz?download=1'
+          curl -fL --retry 5 --retry-delay 2 "$FASTA_URL" -o ref/tair10.fa.gz
+          curl -fL --retry 5 --retry-delay 2 "$ARAPORT_URL" -o ref/araport11.gtf.gz
+          test -s ref/tair10.fa.gz
+          test -s ref/araport11.gtf.gz
+          gzip -dc ref/tair10.fa.gz > ref/genome.fa
+          gzip -dc ref/araport11.gtf.gz > ref/araport11.raw.gtf
+          python3 - <<'PY'
+          mp={'Chr1':'1','Chr2':'2','Chr3':'3','Chr4':'4','Chr5':'5','ChrC':'Pt','ChrM':'Mt'}
+          with open('ref/araport11.raw.gtf') as fi, open('ref/araport11.norm.gtf','w') as fo:
+              for line in fi:
+                  if line.startswith('#') or not line.strip():
+                      fo.write(line); continue
+                  p=line.rstrip('\n').split('\t'); p[0]=mp.get(p[0],p[0]); fo.write('\t'.join(p)+'\n')
+          PY
+          grep -i 'AT1G32640' ref/araport11.norm.gtf > results/MYC2_annotation.gtf
+          test -s results/MYC2_annotation.gtf
+          sha256sum ref/tair10.fa.gz ref/araport11.gtf.gz > results/reference_sha256.txt
+          printf 'source,url\nTAIR10_FASTA,%s\nAraport11_GTF,%s\n' "$FASTA_URL" "$ARAPORT_URL" > results/reference_manifest.csv
+          hisat2-build -p 4 ref/genome.fa ref/tair10 >/dev/null
+
+      - name: Re-align all 12 libraries and measure MYC2 count modes
+        run: |
+          set -euo pipefail
+          cat > results/sample_sheet.csv <<'EOF'
+          run,gsm,treatment,time_h,replicate,group
+          SRR5038590,GSM2397325,MeJA,1,1,MeJA1h
+          SRR5038591,GSM2397326,MeJA,1,2,MeJA1h
+          SRR5038592,GSM2397327,MeJA,5,1,MeJA5h
+          SRR5038593,GSM2397328,MeJA,5,2,MeJA5h
+          SRR5038594,GSM2397329,MeJA,8,1,MeJA8h
+          SRR5038595,GSM2397330,MeJA,8,2,MeJA8h
+          SRR5038602,GSM2397337,Mock,1,1,Mock1h
+          SRR5038603,GSM2397338,Mock,1,2,Mock1h
+          SRR5038604,GSM2397339,Mock,5,1,Mock5h
+          SRR5038605,GSM2397340,Mock,5,2,Mock5h
+          SRR5038606,GSM2397341,Mock,8,1,Mock8h
+          SRR5038607,GSM2397342,Mock,8,2,Mock8h
+          EOF
+          printf 'run,gsm,group,total_reads,locus_all,locus_mapq20,default_count,overlap_O,multimap_M,overlap_multimap_OM\n' > results/MYC2_target_count_modes.csv
+
+          tail -n +2 results/sample_sheet.csv | while IFS=',' read -r RUN GSM TRT TIME REP GROUP; do
+            echo "=== $RUN $GSM $GROUP ==="
+            rclone copyto "agri:$RAW_ROOT/$RUN.sra" "raw/$RUN.sra" --retries 5 --low-level-retries 10
+            test -s "raw/$RUN.sra"
+            vdb-validate "raw/$RUN.sra"
+            fasterq-dump "raw/$RUN.sra" --threads 4 --outdir work
+            test -s "work/$RUN.fastq"
+            READS=$(awk 'END{print NR/4}' "work/$RUN.fastq")
+
+            hisat2 -x ref/tair10 -U "work/$RUN.fastq" -p 4 --summary-file "results/${RUN}_hisat2_summary.txt" \
+              2>"results/${RUN}_hisat2_stderr.txt" | samtools sort -@ 2 -o "work/$RUN.bam" -
+            samtools index "work/$RUN.bam"
+            samtools flagstat "work/$RUN.bam" > "results/${RUN}_flagstat.txt"
+            ALL=$(samtools view -c "work/$RUN.bam" '1:11798119-11801407')
+            Q20=$(samtools view -c -q 20 "work/$RUN.bam" '1:11798119-11801407')
+
+            featureCounts -T 4 -a ref/araport11.norm.gtf -o "counts/${RUN}_default.txt" \
+              -t exon -g gene_id -s 0 "work/$RUN.bam" >"results/${RUN}_fc_default.log" 2>&1
+            featureCounts -T 4 -a ref/araport11.norm.gtf -o "counts/${RUN}_O.txt" \
+              -t exon -g gene_id -s 0 -O "work/$RUN.bam" >"results/${RUN}_fc_O.log" 2>&1
+            featureCounts -T 4 -a ref/araport11.norm.gtf -o "counts/${RUN}_M.txt" \
+              -t exon -g gene_id -s 0 -M "work/$RUN.bam" >"results/${RUN}_fc_M.log" 2>&1
+            featureCounts -T 4 -a ref/araport11.norm.gtf -o "counts/${RUN}_OM.txt" \
+              -t exon -g gene_id -s 0 -O -M "work/$RUN.bam" >"results/${RUN}_fc_OM.log" 2>&1
+
+            FC0=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "counts/${RUN}_default.txt")
+            FCO=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "counts/${RUN}_O.txt")
+            FCM=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "counts/${RUN}_M.txt")
+            FCOM=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "counts/${RUN}_OM.txt")
+            printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$RUN" "$GSM" "$GROUP" "$READS" "$ALL" "$Q20" "${FC0:-NA}" "${FCO:-NA}" "${FCM:-NA}" "${FCOM:-NA}" >> results/MYC2_target_count_modes.csv
+
+            rm -f "raw/$RUN.sra" "work/$RUN.fastq" "work/$RUN.bam" "work/$RUN.bam.bai"
+          done
+
+      - name: Build default and MYC2-corrected matrices
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv,re
+          from collections import OrderedDict
+          meta=list(csv.DictReader(open('results/sample_sheet.csv'))); runs=[m['run'] for m in meta]
+          genes=OrderedDict()
+          for run in runs:
+              with open(f'counts/{run}_default.txt') as f:
+                  rows=[x for x in f if not x.startswith('#')]
+              for row in csv.DictReader(rows,delimiter='\t'):
+                  gid=re.sub(r'\.[0-9]+$','',row['Geneid'].strip('"'))
+                  genes.setdefault(gid,{})[run]=genes.setdefault(gid,{}).get(run,0)+int(row[list(row.keys())[-1]])
+          modes={r['run']:r for r in csv.DictReader(open('results/MYC2_target_count_modes.csv'))}
+          def write_matrix(path,field=None):
+              with open(path,'w',newline='') as f:
+                  w=csv.writer(f); w.writerow(['gene_id']+runs)
+                  for gid,d in genes.items():
+                      vals=[d.get(r,0) for r in runs]
+                      if gid=='AT1G32640' and field:
+                          vals=[int(float(modes[r][field])) for r in runs]
+                      w.writerow([gid]+vals)
+          write_matrix('results/counts_default.csv')
+          write_matrix('results/counts_corrected_O.csv','overlap_O')
+          write_matrix('results/counts_corrected_OM.csv','overlap_multimap_OM')
+          PY
+
+      - name: Run edgeR primary overlap-only and sensitivity overlap-plus-multimap corrections
+        run: |
+          set -euo pipefail
+          cat > results/edger_targeted_correction.R <<'RS'
+          suppressPackageStartupMessages(library(edgeR))
+          meta <- read.csv('results/sample_sheet.csv', stringsAsFactors=FALSE)
+          group <- factor(meta$group, levels=c('Mock1h','MeJA1h','Mock5h','MeJA5h','Mock8h','MeJA8h'))
+          design <- model.matrix(~0+group); colnames(design) <- levels(group)
+          cons <- list(MeJA1h_vs_Mock1h=c(-1,1,0,0,0,0),MeJA5h_vs_Mock5h=c(0,0,-1,1,0,0),MeJA8h_vs_Mock8h=c(0,0,0,0,-1,1))
+          targets <- c(VSP1='AT5G24780',VSP2='AT5G24770',LOX2='AT3G45140',JAZ10='AT5G13220',MYC2='AT1G32640',PDF1.2='AT5G44420',ORA59='AT1G06160',ERF1='AT3G23240')
+          run_one <- function(label,path){
+            x <- read.csv(path,row.names=1,check.names=FALSE)
+            x <- as.matrix(x[,meta$run,drop=FALSE]); storage.mode(x)<-'integer'
+            y0 <- DGEList(counts=x,group=group); y0 <- calcNormFactors(y0,method='TMM')
+            keep <- filterByExpr(y0,group=group)
+            write.csv(data.frame(gene_id=rownames(y0),keep=keep),paste0('results/filterByExpr_',label,'.csv'),row.names=FALSE)
+            cpm0 <- cpm(y0,normalized.lib.sizes=TRUE)
+            y <- y0[keep,,keep.lib.sizes=FALSE]; y <- calcNormFactors(y,method='TMM')
+            y <- estimateDisp(y,design,robust=TRUE); fit <- glmQLFit(y,design,robust=TRUE)
+            out <- data.frame()
+            for(nm in names(cons)){
+              q <- glmQLFTest(fit,contrast=cons[[nm]])
+              tab <- topTags(q,n=Inf,sort.by='none')$table; tab$gene_id<-rownames(tab); tab$FDR_genome<-p.adjust(tab$PValue,'BH')
+              z <- data.frame(method=label,gene=names(targets),gene_id=unname(targets),contrast=nm,filtered_in=unname(targets)%in%rownames(tab),logFC=NA_real_,logCPM=NA_real_,PValue=NA_real_,FDR_genome=NA_real_)
+              for(i in seq_len(nrow(z))) if(z$filtered_in[i]){rr<-tab[z$gene_id[i],];z$logFC[i]<-rr$logFC;z$logCPM[i]<-rr$logCPM;z$PValue[i]<-rr$PValue;z$FDR_genome[i]<-rr$FDR_genome}
+              z$FDR_panel<-NA_real_; ok<-which(!is.na(z$PValue)); if(length(ok)) z$FDR_panel[ok]<-p.adjust(z$PValue[ok],'BH')
+              out<-rbind(out,z)
+              write.csv(tab,paste0('results/edgeR_',label,'_',nm,'_full.csv'),row.names=FALSE)
+            }
+            myc <- 'AT1G32640'
+            my <- data.frame(method=label,meta,raw_count=if(myc %in% rownames(x)) as.numeric(x[myc,]) else NA,CPM=if(myc %in% rownames(cpm0)) as.numeric(cpm0[myc,]) else NA,passed_filter=if(myc %in% rownames(y0)) keep[myc] else FALSE)
+            write.csv(my,paste0('results/MYC2_',label,'_counts_CPM.csv'),row.names=FALSE)
+            out
+          }
+          o <- run_one('overlap_O','results/counts_corrected_O.csv')
+          om <- run_one('overlap_multimap_OM','results/counts_corrected_OM.csv')
+          write.csv(rbind(o,om),'results/target_panel_edgeR_targeted_correction.csv',row.names=FALSE)
+          sink('results/R_sessionInfo.txt'); sessionInfo(); sink()
+          RS
+          Rscript results/edger_targeted_correction.R
+
+      - name: Compare MYC2 raw-derived counts with deposited matrix and write report
+        run: |
+          set -euo pipefail
+          rclone copyto "agri:PUBLIC_OMICS/ARABIDOPSIS/PROCESSED_REFERENCE/GEO_GSE90077/GSE90077_JBM_counts.txt.gz" results/deposited.gz --retries 5 --low-level-retries 10
+          python3 - <<'PY'
+          import csv,gzip,math,statistics
+          meta=list(csv.DictReader(open('results/sample_sheet.csv')))
+          modes={r['run']:r for r in csv.DictReader(open('results/MYC2_target_count_modes.csv'))}
+          header=None; row=None
+          with gzip.open('results/deposited.gz','rt',errors='replace') as f:
+              for line in f:
+                  p=line.rstrip('\n').split('\t')
+                  if header is None:
+                      header=[x.strip('"') for x in p]
+                  if p and p[0].strip('"').upper()=='AT1G32640':
+                      row=[x.strip('"') for x in p]; break
+          dep={}
+          if header and row:
+              for m in meta:
+                  idx=None
+                  for i,h in enumerate(header):
+                      if h==m['gsm'] or m['gsm'] in h:
+                          idx=i; break
+                  if idx is not None and idx < len(row):
+                      try: dep[m['run']]=float(row[idx])
+                      except: pass
+          with open('results/MYC2_raw_vs_deposited.csv','w',newline='') as f:
+              w=csv.writer(f); w.writerow(['run','gsm','group','deposited_count','default_count','overlap_O','overlap_multimap_OM','locus_all'])
+              for m in meta:
+                  r=modes[m['run']]; w.writerow([m['run'],m['gsm'],m['group'],dep.get(m['run'],'NA'),r['default_count'],r['overlap_O'],r['overlap_multimap_OM'],r['locus_all']])
+          def pearson(a,b):
+              if len(a)<2: return float('nan')
+              ma=sum(a)/len(a); mb=sum(b)/len(b)
+              num=sum((x-ma)*(y-mb) for x,y in zip(a,b)); da=sum((x-ma)**2 for x in a); db=sum((y-mb)**2 for y in b)
+              return num/math.sqrt(da*db) if da and db else float('nan')
+          pairsO=[(dep[r],float(modes[r]['overlap_O'])) for r in dep]
+          pairsOM=[(dep[r],float(modes[r]['overlap_multimap_OM'])) for r in dep]
+          corrO=pearson([x for x,y in pairsO],[y for x,y in pairsO]) if pairsO else float('nan')
+          corrOM=pearson([x for x,y in pairsOM],[y for x,y in pairsOM]) if pairsOM else float('nan')
+          panel=list(csv.DictReader(open('results/target_panel_edgeR_targeted_correction.csv')))
+          myc=[r for r in panel if r['gene']=='MYC2']
+          lines=['# GSE90077 MYC2 targeted overlap-aware correction','',
+                 'The public raw SRA reads were re-aligned for all 12 MeJA/Mock libraries. Default featureCounts was retained for the transcriptome-wide matrix, but MYC2 was additionally counted under increasingly permissive assignment modes. Two corrected matrices were analyzed: overlap-only (-O) as the primary targeted correction, and overlap-plus-multimapping (-O -M) as a sensitivity analysis. Other genes retain default counts.','',
+                 f'Deposited-vs-raw MYC2 correlation where matched GSM columns were available: overlap-only r={corrO:.6f}; overlap+multimap r={corrOM:.6f}.','',
+                 '## MYC2 edgeR results','',
+                 '| Method | Contrast | log2FC | P | panel FDR | genome FDR | filtered in |','|---|---|---:|---:|---:|---:|---|']
+          for r in myc:
+              def fmt(k):
+                  v=r[k]
+                  try: return f'{float(v):.6g}'
+                  except: return v or 'NA'
+              lines.append(f"| {r['method']} | {r['contrast']} | {fmt('logFC')} | {fmt('PValue')} | {fmt('FDR_panel')} | {fmt('FDR_genome')} | {r['filtered_in']} |")
+          lines += ['', '## Interpretation rule','',
+                    '- Primary inference uses overlap-only counting if it restores MYC2 while avoiding unnecessary multimapping permission.',
+                    '- The overlap-plus-multimap analysis is a sensitivity check; agreement between the two supports robustness.',
+                    '- ERF1 remains interpreted separately from the prior validated low-expression recount and is not converted from NA to no-effect.']
+          open('results/GSE90077_MYC2_TARGETED_CORRECTION_REPORT.md','w').write('\n'.join(lines)+'\n')
+          PY
+          rm -f results/deposited.gz
+
+      - name: Upload verified results to separate agriculture Drive
+        run: |
+          set -euo pipefail
+          rclone copy results "agri:$OUT_ROOT/" --checksum --retries 5 --low-level-retries 10
+          rclone lsl "agri:$OUT_ROOT" > results/drive_verified_listing.txt
+          test -s results/drive_verified_listing.txt
+          rclone copy results/drive_verified_listing.txt "agri:$OUT_ROOT/" --checksum --retries 5 --low-level-retries 10
+
+      - name: Upload compact artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agriculture-gse90077-myc2-targeted-correction
+          path: results/
+          if-no-files-found: error
