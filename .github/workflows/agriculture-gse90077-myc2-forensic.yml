@@ -34,34 +34,49 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ref work results raw
-          curl -fL --retry 5 --retry-delay 2 \
-            https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-63/fasta/arabidopsis_thaliana/dna/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz \
-            -o ref/genome.fa.gz
-          curl -fL --retry 5 --retry-delay 2 \
-            https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-63/fasta/arabidopsis_thaliana/cdna/Arabidopsis_thaliana.TAIR10.cdna.all.fa.gz \
-            -o ref/cdna.fa.gz
-          curl -fL --retry 5 --retry-delay 2 \
-            https://www.arabidopsis.org/download_files/Genes/Araport11_genome_release/Araport11_GFF3_genes_transposons.20240331.gtf.gz \
-            -o ref/araport11.gtf.gz
+          GENOME_URL='https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-63/fasta/arabidopsis_thaliana/dna/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz'
+          CDNA_URL='https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-63/fasta/arabidopsis_thaliana/cdna/Arabidopsis_thaliana.TAIR10.cdna.all.fa.gz'
+          ARAPORT_URL='https://zenodo.org/records/15889083/files/Araport11_GTF_genes_transposons.20240331.gtf.gz?download=1'
+          curl -fL --retry 5 --retry-delay 2 "$GENOME_URL" -o ref/genome.fa.gz
+          curl -fL --retry 5 --retry-delay 2 "$CDNA_URL" -o ref/cdna.fa.gz
+          curl -fL --retry 5 --retry-delay 2 "$ARAPORT_URL" -o ref/araport11.raw.gtf.gz
+          test -s ref/genome.fa.gz
+          test -s ref/cdna.fa.gz
+          test -s ref/araport11.raw.gtf.gz
           gzip -dc ref/genome.fa.gz > ref/genome.fa
           gzip -dc ref/cdna.fa.gz > ref/cdna.fa
-          gzip -dc ref/araport11.gtf.gz > ref/araport11.gtf
+          gzip -dc ref/araport11.raw.gtf.gz > ref/araport11.raw.gtf
+          python3 - <<'PY'
+          mp={'Chr1':'1','Chr2':'2','Chr3':'3','Chr4':'4','Chr5':'5','ChrC':'Pt','ChrM':'Mt'}
+          with open('ref/araport11.raw.gtf') as fi, open('ref/araport11.gtf','w') as fo:
+              for line in fi:
+                  if line.startswith('#') or not line.strip():
+                      fo.write(line); continue
+                  p=line.rstrip('\n').split('\t')
+                  p[0]=mp.get(p[0],p[0])
+                  fo.write('\t'.join(p)+'\n')
+          PY
+          grep -i 'AT1G32640' ref/araport11.gtf > results/MYC2_araport11_annotation.txt || true
+          grep '^>' ref/cdna.fa | grep -i 'AT1G32640' > results/MYC2_cdna_headers.txt || true
           hisat2-build -p 4 ref/genome.fa ref/genome >/dev/null
           hisat2-build -p 4 ref/cdna.fa ref/cdna >/dev/null
           samtools faidx ref/genome.fa
           awk '$1=="1" && $4<=11801407 && $5>=11798119 {print}' ref/araport11.gtf > results/MYC2_araport11_locus.gtf
-          sha256sum ref/genome.fa.gz ref/cdna.fa.gz ref/araport11.gtf.gz > results/reference_sha256.txt
+          test -s results/MYC2_araport11_locus.gtf
+          sha256sum ref/genome.fa.gz ref/cdna.fa.gz ref/araport11.raw.gtf.gz > results/reference_sha256.txt
+          printf 'source,url\nTAIR10_genome,%s\nTAIR10_cdna,%s\nAraport11_GTF,%s\n' "$GENOME_URL" "$CDNA_URL" "$ARAPORT_URL" > results/reference_manifest.csv
 
       - name: Audit two diagnostic libraries
         run: |
           set -euo pipefail
           printf 'run,condition,deposited_MYC2\nSRR5038590,MeJA1h_rep1,8142\nSRR5038602,Mock1h_rep1,332\n' > results/diagnostic_samples.csv
           printf 'run,total_reads,genome_align_rate,locus_all,locus_mapq10,locus_mapq20,featureCounts_default,featureCounts_M,featureCounts_O_M,cdna_MYC2_all,cdna_MYC2_mapq10\n' > results/MYC2_forensic_counts.csv
-
           tail -n +2 results/diagnostic_samples.csv | while IFS=',' read -r RUN CONDITION DEPOSITED; do
             rclone copyto "agri:$RAW_ROOT/$RUN.sra" "raw/$RUN.sra" --retries 5 --low-level-retries 10
+            test -s "raw/$RUN.sra"
             vdb-validate "raw/$RUN.sra"
             fasterq-dump "raw/$RUN.sra" --threads 4 --outdir work
+            test -s "work/$RUN.fastq"
             READS=$(awk 'END{print NR/4}' "work/$RUN.fastq")
 
             hisat2 -x ref/genome -U "work/$RUN.fastq" -p 4 --summary-file "results/${RUN}_genome_summary.txt" 2>"results/${RUN}_genome_stderr.txt" | samtools sort -@ 2 -o "work/$RUN.genome.bam" -
@@ -73,16 +88,16 @@ jobs:
             samtools view "work/$RUN.genome.bam" '1:11798119-11801407' > "results/${RUN}_MYC2_locus_alignments.sam.txt"
             samtools depth -a -r '1:11798119-11801407' "work/$RUN.genome.bam" > "results/${RUN}_MYC2_depth.tsv"
 
-            featureCounts -T 2 -a ref/araport11.gtf -o "work/${RUN}_fc_default.txt" -t exon -g gene_id -s 0 "work/$RUN.genome.bam" >/dev/null 2>&1
-            featureCounts -T 2 -a ref/araport11.gtf -o "work/${RUN}_fc_M.txt" -t exon -g gene_id -s 0 -M "work/$RUN.genome.bam" >/dev/null 2>&1
-            featureCounts -T 2 -a ref/araport11.gtf -o "work/${RUN}_fc_OM.txt" -t exon -g gene_id -s 0 -O -M "work/$RUN.genome.bam" >/dev/null 2>&1
+            featureCounts -T 2 -a ref/araport11.gtf -o "work/${RUN}_fc_default.txt" -t exon -g gene_id -s 0 "work/$RUN.genome.bam" >"results/${RUN}_fc_default.log" 2>&1
+            featureCounts -T 2 -a ref/araport11.gtf -o "work/${RUN}_fc_M.txt" -t exon -g gene_id -s 0 -M "work/$RUN.genome.bam" >"results/${RUN}_fc_M.log" 2>&1
+            featureCounts -T 2 -a ref/araport11.gtf -o "work/${RUN}_fc_OM.txt" -t exon -g gene_id -s 0 -O -M "work/$RUN.genome.bam" >"results/${RUN}_fc_OM.log" 2>&1
             FC0=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "work/${RUN}_fc_default.txt")
             FCM=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "work/${RUN}_fc_M.txt")
             FCOM=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "work/${RUN}_fc_OM.txt")
 
             hisat2 --no-spliced-alignment -x ref/cdna -U "work/$RUN.fastq" -p 4 -k 20 2>"results/${RUN}_cdna_stderr.txt" | samtools view -bS - | samtools sort -o "work/$RUN.cdna.bam" -
             samtools index "work/$RUN.cdna.bam"
-            TRANSCRIPT=$(grep -m1 '^>AT1G32640' ref/cdna.fa | sed 's/^>//;s/ .*//')
+            TRANSCRIPT=$(grep -m1 '^>AT1G32640' ref/cdna.fa | sed 's/^>//;s/ .*//' || true)
             if [ -n "$TRANSCRIPT" ]; then
               CDA=$(samtools view -c "work/$RUN.cdna.bam" "$TRANSCRIPT" || true)
               CDQ=$(samtools view -c -q 10 "work/$RUN.cdna.bam" "$TRANSCRIPT" || true)
@@ -90,7 +105,6 @@ jobs:
               CDA=NA; CDQ=NA
             fi
             printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$RUN" "$READS" "$RATE" "$ALL" "$Q10" "$Q20" "${FC0:-NA}" "${FCM:-NA}" "${FCOM:-NA}" "$CDA" "$CDQ" >> results/MYC2_forensic_counts.csv
-
             rm -f "raw/$RUN.sra" "work/$RUN.fastq" "work/$RUN.genome.bam" "work/$RUN.genome.bam.bai" "work/$RUN.cdna.bam" "work/$RUN.cdna.bam.bai"
           done
 
