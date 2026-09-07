@@ -1,0 +1,55 @@
+{
+  "version": "v7",
+  "reviewed_at": "2026-09-07",
+  "policy": "Promote only when SEC legal-entity identity and independent ROR-linked organization evidence converge. Clear industry, geography, or entity-type contradictions are rejected; generic-name candidates remain under review without independent exact-identity evidence.",
+  "items": [
+    {
+      "canonical_company_id": "SEC_CIK:0001815849",
+      "sec_name": "ATI Physical Therapy, Inc.",
+      "openalex_name": "ATI Physical Therapy",
+      "ror": "https://ror.org/00g11cc66",
+      "decision": "PROMOTE",
+      "reason": "SEC identifies ATI Physical Therapy, Inc. as the exact registrant in Downers Grove, Illinois; independent organization metadata identifies ATI Physical Therapy with the same official site and ROR 00g11cc66.",
+      "evidence": [
+        "SEC Form 10-K identifies ATI Physical Therapy, Inc., CIK 0001815849, at 2001 Butterfield Road, Downers Grove, Illinois.",
+        "Independent organization metadata identifies ATI Physical Therapy, official website atipt.com, Illinois location, and ROR 00g11cc66."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001802883",
+      "sec_name": "Agora, Inc.",
+      "openalex_name": "Agora",
+      "ror": "https://ror.org/04t5qmm38",
+      "decision": "REJECT",
+      "reason": "The SEC issuer is a Cayman-incorporated software company operating from California, while the candidate organization is a Dutch palliation-focused foundation in Bunnik, Netherlands. This is a same-name false positive.",
+      "evidence": [
+        "SEC identifies Agora, Inc., CIK 0001802883, as a software issuer with California business address and Cayman Islands incorporation.",
+        "The Dutch Agora organization is Stichting Agora, focused on palliative care and located in Bunnik, Netherlands."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001895262",
+      "sec_name": "Noble Corp plc",
+      "openalex_name": "Noble",
+      "ror": "https://ror.org/03b58r371",
+      "decision": "REJECT",
+      "reason": "The SEC registrant is Noble Corp plc, an oil-and-gas drilling company headquartered in Houston, while the candidate is classified as a nonprofit generic Noble organization. Legal-entity and industry scope do not match.",
+      "evidence": [
+        "SEC filings identify Noble Corp plc, CIK 0001895262, at 2101 City West Boulevard, Houston, with SIC 1381 Drilling Oil & Gas Wells.",
+        "The candidate OpenAlex organization is nonprofit-type and labeled only Noble, inconsistent with the SEC drilling company."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001975931",
+      "sec_name": "Bloom HoldCo LLC",
+      "openalex_name": "BLOOM",
+      "ror": "https://ror.org/02pcazp65",
+      "decision": "KEEP_REVIEW",
+      "reason": "SEC identifies a Delaware/Miami technology holding company tied to Bloom Protocol, but the generic BLOOM OpenAlex/ROR record lacks sufficient independent legal-entity evidence to establish exact identity.",
+      "evidence": [
+        "SEC filings identify Bloom HoldCo LLC, CIK 0001975931, as a Delaware limited liability company and technology holding company with Miami business address.",
+        "The OpenAlex candidate uses the generic label BLOOM and lacks sufficiently specific geography/type evidence for production promotion."
+      ]
+    }
+  ]
+}
