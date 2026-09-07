@@ -1,0 +1,130 @@
+name: Agriculture GSE90077 MYC2 locus forensic audit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/agriculture-gse90077-myc2-forensic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  forensic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      RCLONE_CONFIG_AGRI_TYPE: drive
+      RCLONE_CONFIG_AGRI_SCOPE: drive
+      RCLONE_CONFIG_AGRI_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_AGRI_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_AGRI_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_AGRI_ROOT_FOLDER_ID: 1nvqPV6Ko6X3eP7yQ9wwzBPy0NCkfjIOF
+      RAW_ROOT: PUBLIC_OMICS/ARABIDOPSIS/GSE90077_RAW_SRA
+      OUT_ROOT: PUBLIC_OMICS/ARABIDOPSIS/ANALYSIS/GSE90077_MYC2_FORENSIC
+    steps:
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends sra-toolkit hisat2 samtools subread curl ca-certificates gzip python3
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Fetch TAIR10 genome, Araport11 annotation, and cDNA transcriptome
+        run: |
+          set -euo pipefail
+          mkdir -p ref work results raw
+          curl -fL --retry 5 --retry-delay 2 \
+            https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-63/fasta/arabidopsis_thaliana/dna/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz \
+            -o ref/genome.fa.gz
+          curl -fL --retry 5 --retry-delay 2 \
+            https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-63/fasta/arabidopsis_thaliana/cdna/Arabidopsis_thaliana.TAIR10.cdna.all.fa.gz \
+            -o ref/cdna.fa.gz
+          curl -fL --retry 5 --retry-delay 2 \
+            https://www.arabidopsis.org/download_files/Genes/Araport11_genome_release/Araport11_GFF3_genes_transposons.20240331.gtf.gz \
+            -o ref/araport11.gtf.gz
+          gzip -dc ref/genome.fa.gz > ref/genome.fa
+          gzip -dc ref/cdna.fa.gz > ref/cdna.fa
+          gzip -dc ref/araport11.gtf.gz > ref/araport11.gtf
+          hisat2-build -p 4 ref/genome.fa ref/genome >/dev/null
+          hisat2-build -p 4 ref/cdna.fa ref/cdna >/dev/null
+          samtools faidx ref/genome.fa
+          awk '$1=="1" && $4<=11801407 && $5>=11798119 {print}' ref/araport11.gtf > results/MYC2_araport11_locus.gtf
+          sha256sum ref/genome.fa.gz ref/cdna.fa.gz ref/araport11.gtf.gz > results/reference_sha256.txt
+
+      - name: Audit two diagnostic libraries
+        run: |
+          set -euo pipefail
+          printf 'run,condition,deposited_MYC2\nSRR5038590,MeJA1h_rep1,8142\nSRR5038602,Mock1h_rep1,332\n' > results/diagnostic_samples.csv
+          printf 'run,total_reads,genome_align_rate,locus_all,locus_mapq10,locus_mapq20,featureCounts_default,featureCounts_M,featureCounts_O_M,cdna_MYC2_all,cdna_MYC2_mapq10\n' > results/MYC2_forensic_counts.csv
+
+          tail -n +2 results/diagnostic_samples.csv | while IFS=',' read -r RUN CONDITION DEPOSITED; do
+            rclone copyto "agri:$RAW_ROOT/$RUN.sra" "raw/$RUN.sra" --retries 5 --low-level-retries 10
+            vdb-validate "raw/$RUN.sra"
+            fasterq-dump "raw/$RUN.sra" --threads 4 --outdir work
+            READS=$(awk 'END{print NR/4}' "work/$RUN.fastq")
+
+            hisat2 -x ref/genome -U "work/$RUN.fastq" -p 4 --summary-file "results/${RUN}_genome_summary.txt" 2>"results/${RUN}_genome_stderr.txt" | samtools sort -@ 2 -o "work/$RUN.genome.bam" -
+            samtools index "work/$RUN.genome.bam"
+            RATE=$(tail -n 1 "results/${RUN}_genome_summary.txt" | awk '{print $1}')
+            ALL=$(samtools view -c "work/$RUN.genome.bam" '1:11798119-11801407')
+            Q10=$(samtools view -c -q 10 "work/$RUN.genome.bam" '1:11798119-11801407')
+            Q20=$(samtools view -c -q 20 "work/$RUN.genome.bam" '1:11798119-11801407')
+            samtools view "work/$RUN.genome.bam" '1:11798119-11801407' > "results/${RUN}_MYC2_locus_alignments.sam.txt"
+            samtools depth -a -r '1:11798119-11801407' "work/$RUN.genome.bam" > "results/${RUN}_MYC2_depth.tsv"
+
+            featureCounts -T 2 -a ref/araport11.gtf -o "work/${RUN}_fc_default.txt" -t exon -g gene_id -s 0 "work/$RUN.genome.bam" >/dev/null 2>&1
+            featureCounts -T 2 -a ref/araport11.gtf -o "work/${RUN}_fc_M.txt" -t exon -g gene_id -s 0 -M "work/$RUN.genome.bam" >/dev/null 2>&1
+            featureCounts -T 2 -a ref/araport11.gtf -o "work/${RUN}_fc_OM.txt" -t exon -g gene_id -s 0 -O -M "work/$RUN.genome.bam" >/dev/null 2>&1
+            FC0=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "work/${RUN}_fc_default.txt")
+            FCM=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "work/${RUN}_fc_M.txt")
+            FCOM=$(awk -F'\t' '$1=="AT1G32640"{print $7}' "work/${RUN}_fc_OM.txt")
+
+            hisat2 --no-spliced-alignment -x ref/cdna -U "work/$RUN.fastq" -p 4 -k 20 2>"results/${RUN}_cdna_stderr.txt" | samtools view -bS - | samtools sort -o "work/$RUN.cdna.bam" -
+            samtools index "work/$RUN.cdna.bam"
+            TRANSCRIPT=$(grep -m1 '^>AT1G32640' ref/cdna.fa | sed 's/^>//;s/ .*//')
+            if [ -n "$TRANSCRIPT" ]; then
+              CDA=$(samtools view -c "work/$RUN.cdna.bam" "$TRANSCRIPT" || true)
+              CDQ=$(samtools view -c -q 10 "work/$RUN.cdna.bam" "$TRANSCRIPT" || true)
+            else
+              CDA=NA; CDQ=NA
+            fi
+            printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$RUN" "$READS" "$RATE" "$ALL" "$Q10" "$Q20" "${FC0:-NA}" "${FCM:-NA}" "${FCOM:-NA}" "$CDA" "$CDQ" >> results/MYC2_forensic_counts.csv
+
+            rm -f "raw/$RUN.sra" "work/$RUN.fastq" "work/$RUN.genome.bam" "work/$RUN.genome.bam.bai" "work/$RUN.cdna.bam" "work/$RUN.cdna.bam.bai"
+          done
+
+      - name: Write forensic interpretation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv
+          rows=list(csv.DictReader(open('results/MYC2_forensic_counts.csv')))
+          dep={r['run']:r for r in csv.DictReader(open('results/diagnostic_samples.csv'))}
+          out=['# GSE90077 MYC2 focused forensic audit','',
+               'This audit tests two representative raw libraries against the exact TAIR10 MYC2 genomic locus and against the full Arabidopsis cDNA transcriptome. It is designed to distinguish annotation/counting failure from absence of MYC2-compatible raw reads.','',
+               '| Run | Condition | Deposited MYC2 | Locus alignments | MAPQ>=20 | featureCounts default | featureCounts +multimap/overlap | cDNA MYC2 alignments |',
+               '|---|---|---:|---:|---:|---:|---:|---:|']
+          for r in rows:
+              d=dep[r['run']]
+              out.append(f"| {r['run']} | {d['condition']} | {d['deposited_MYC2']} | {r['locus_all']} | {r['locus_mapq20']} | {r['featureCounts_default']} | {r['featureCounts_O_M']} | {r['cdna_MYC2_all']} |")
+          out += ['', '## Decision rule', '',
+                  '- If genomic-locus and cDNA MYC2 alignments are both near zero despite thousands of deposited counts, the deposited matrix is discordant with the public SRA reads for MYC2 and should remain the source for the historical published count result; raw reprocessing cannot independently validate MYC2.',
+                  '- If MYC2-compatible reads are present but featureCounts is zero, the problem is counting/annotation assignment and the raw analysis should be repaired accordingly.',
+                  '- ERF1 is not re-litigated here; its low raw counts were already independently reproduced.']
+          open('results/GSE90077_MYC2_FORENSIC_REPORT.md','w').write('\n'.join(out)+'\n')
+          PY
+
+      - name: Upload results to separate agriculture Drive
+        run: |
+          set -euo pipefail
+          rclone copy results "agri:$OUT_ROOT/" --checksum --retries 5 --low-level-retries 10
+          rclone lsl "agri:$OUT_ROOT" > results/drive_verified_listing.txt
+          test -s results/drive_verified_listing.txt
+
+      - name: Upload compact artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agriculture-gse90077-myc2-forensic
+          path: results/
+          if-no-files-found: error
