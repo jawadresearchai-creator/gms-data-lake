@@ -43,8 +43,9 @@ jobs:
             --adjudication-v6 registry/cross_domain/organization_manual_adjudication_v6.json \
             --adjudication-v7 registry/cross_domain/organization_manual_adjudication_v7.json \
             --adjudication-v8 registry/cross_domain/organization_manual_adjudication_v8.json \
+            --adjudication-v9 registry/cross_domain/organization_manual_adjudication_v9.json \
             --out-dir out
-          rclone copyto out/SEC_OPENALEX_ORG_UNRESOLVED_RANKED.parquet gdrive:03_RESEARCH/cross_domain/v8/SEC_OPENALEX_ORG_UNRESOLVED_RANKED/part-0000.parquet --stats 0
-          rclone copyto out/SEC_OPENALEX_ORG_UNRESOLVED_RANKED.csv gdrive:03_RESEARCH/cross_domain/v8/SEC_OPENALEX_ORG_UNRESOLVED_RANKED/unresolved_ranked.csv --stats 0
-          rclone copyto out/organization_unresolved_rank_manifest.json gdrive:00_CONTROL/analytics/cross_domain/v8/organization_unresolved_rank_manifest.json --stats 0
+          rclone copyto out/SEC_OPENALEX_ORG_UNRESOLVED_RANKED.parquet gdrive:03_RESEARCH/cross_domain/v9/SEC_OPENALEX_ORG_UNRESOLVED_RANKED/part-0000.parquet --stats 0
+          rclone copyto out/SEC_OPENALEX_ORG_UNRESOLVED_RANKED.csv gdrive:03_RESEARCH/cross_domain/v9/SEC_OPENALEX_ORG_UNRESOLVED_RANKED/unresolved_ranked.csv --stats 0
+          rclone copyto out/organization_unresolved_rank_manifest.json gdrive:00_CONTROL/analytics/cross_domain/v9/organization_unresolved_rank_manifest.json --stats 0
           cat out/organization_unresolved_rank_manifest.json

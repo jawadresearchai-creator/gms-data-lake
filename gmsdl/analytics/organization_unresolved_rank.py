@@ -7,7 +7,7 @@ from pathlib import Path
 import duckdb
 
 
-def rank_unresolved(reclassification: Path, adjudication_v3: Path, adjudication_v4: Path, adjudication_v5: Path, adjudication_v6: Path, adjudication_v7: Path, adjudication_v8: Path, out_dir: Path) -> dict:
+def rank_unresolved(reclassification: Path, adjudication_v3: Path, adjudication_v4: Path, adjudication_v5: Path, adjudication_v6: Path, adjudication_v7: Path, adjudication_v8: Path, adjudication_v9: Path, out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     a3=json.loads(adjudication_v3.read_text(encoding='utf-8'))
     a4=json.loads(adjudication_v4.read_text(encoding='utf-8'))
@@ -15,6 +15,7 @@ def rank_unresolved(reclassification: Path, adjudication_v3: Path, adjudication_
     a6=json.loads(adjudication_v6.read_text(encoding='utf-8'))
     a7=json.loads(adjudication_v7.read_text(encoding='utf-8'))
     a8=json.loads(adjudication_v8.read_text(encoding='utf-8'))
+    a9=json.loads(adjudication_v9.read_text(encoding='utf-8'))
     final_decisions={}
     for item in a3.get('items',[]):
         final_decisions[item['canonical_company_id']]=item.get('decision')
@@ -27,6 +28,8 @@ def rank_unresolved(reclassification: Path, adjudication_v3: Path, adjudication_
     for item in a7.get('items',[]):
         final_decisions[item['canonical_company_id']]=item.get('decision')
     for item in a8.get('items',[]):
+        final_decisions[item['canonical_company_id']]=item.get('decision')
+    for item in a9.get('items',[]):
         final_decisions[item['canonical_company_id']]=item.get('decision')
     excluded={cid for cid,d in final_decisions.items() if d in {'PROMOTE','REJECT'}}
 
@@ -119,11 +122,11 @@ def main() -> int:
     p.add_argument('--adjudication-v6',type=Path,required=True)
     p.add_argument('--adjudication-v7',type=Path,required=True)
     p.add_argument('--adjudication-v8',type=Path,required=True)
+    p.add_argument('--adjudication-v9',type=Path,required=True)
     p.add_argument('--out-dir',type=Path,required=True)
     a=p.parse_args()
-    print(json.dumps(rank_unresolved(a.reclassification,a.adjudication_v3,a.adjudication_v4,a.adjudication_v5,a.adjudication_v6,a.adjudication_v7,a.adjudication_v8,a.out_dir),indent=2,sort_keys=True,default=str))
+    print(json.dumps(rank_unresolved(a.reclassification,a.adjudication_v3,a.adjudication_v4,a.adjudication_v5,a.adjudication_v6,a.adjudication_v7,a.adjudication_v8,a.adjudication_v9,a.out_dir),indent=2,sort_keys=True,default=str))
     return 0
 
 if __name__=='__main__':
     raise SystemExit(main())
-
