@@ -1,0 +1,43 @@
+{
+  "version": "v8",
+  "reviewed_at": "2026-09-07",
+  "policy": "Promote where SEC legal-entity identity, country, official corporate identity, and ROR/OpenAlex organization scope converge. Country-specific subsidiaries or affiliates are not treated as the SEC parent legal entity.",
+  "items": [
+    {
+      "canonical_company_id": "SEC_CIK:0001368519",
+      "sec_name": "North American Construction Group Ltd.",
+      "openalex_name": "North American Construction Group (Canada)",
+      "ror": "https://ror.org/0168eqd84",
+      "decision": "PROMOTE",
+      "reason": "SEC and official corporate materials identify the same Canadian North American Construction Group Ltd. at the same Acheson, Alberta headquarters; OpenAlex company identity and country agree.",
+      "evidence": [
+        "SEC identifies North American Construction Group Ltd., CIK 0001368519, at 27287 100 Avenue, Acheson, Alberta, Canada.",
+        "The company's official website identifies North American Construction Group Ltd. at the same Acheson, Alberta address and as the NYSE/TSX-listed construction and mining company."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0002107989",
+      "sec_name": "Keisei Electric Railway Co. Ltd/ADR",
+      "openalex_name": "Keisei Electric Railway Co., Ltd. (Japan)",
+      "ror": "https://ror.org/048ngwe58",
+      "decision": "PROMOTE",
+      "reason": "The SEC ADR subject is Keisei Electric Railway Co. Ltd. in Japan, while independent identity metadata identifies the same Japanese railway company and explicitly assigns ROR 048ngwe58.",
+      "evidence": [
+        "SEC Form F-6EF identifies Keisei Electric Railway Co. Ltd/ADR, CIK 0002107989, with the underlying company at Ichikawa City, Chiba Prefecture, Japan.",
+        "Independent identity metadata for Keisei Electric Railway lists ROR 048ngwe58 and describes the same Japanese railway company."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000051253",
+      "sec_name": "INTERNATIONAL FLAVORS & FRAGRANCES INC",
+      "openalex_name": "International Flavors & Fragrances (France)",
+      "ror": "https://ror.org/03esh6f70",
+      "decision": "REJECT",
+      "reason": "The SEC registrant is the New York parent corporation, while the OpenAlex candidate is explicitly the France organization. This is a country-specific affiliate/subsidiary scope mismatch rather than the same legal entity.",
+      "evidence": [
+        "SEC identifies International Flavors & Fragrances Inc., CIK 0000051253, as a New York corporation with principal executive offices in New York and Delaware.",
+        "The OpenAlex candidate is explicitly International Flavors & Fragrances (France), country FR."
+      ]
+    }
+  ]
+}
