@@ -1,0 +1,92 @@
+{
+  "version": "v10",
+  "reviewed_at": "2026-09-07",
+  "policy": "Promote foreign issuers when SEC legal identity, home-country scope, and independent ROR-linked organization identity converge. Country-specific affiliates of U.S. parents and name-only fuzzy matches are rejected.",
+  "items": [
+    {
+      "canonical_company_id": "SEC_CIK:0001437441",
+      "sec_name": "Piraeus Bank S.A.",
+      "openalex_name": "Piraeus Bank",
+      "ror": "https://ror.org/036j3t423",
+      "decision": "PROMOTE",
+      "reason": "SEC/ADR records identify Piraeus Bank S.A. as the Greek bank, and official Piraeus materials identify the same current Piraeus Bank S.A. legal entity in Athens; OpenAlex country/name align.",
+      "evidence": [
+        "CIK 0001437441 is Piraeus Bank S.A. in SEC/ADR records.",
+        "Piraeus official business terms identify Piraeus Bank S.A. as the banking company headquartered at 4 Amerikis Street, Athens, Greece.",
+        "OpenAlex candidate is Piraeus Bank, country GR, with ROR 036j3t423."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001033767",
+      "sec_name": "UNITED MICROELECTRONICS CORP",
+      "openalex_name": "United Microelectronics (Taiwan)",
+      "ror": "https://ror.org/0580qje17",
+      "decision": "PROMOTE",
+      "reason": "SEC identifies the Taiwan-incorporated United Microelectronics Corporation, and independent identity metadata links the same Taiwan semiconductor company, CIK 0001033767, to ROR 0580qje17.",
+      "evidence": [
+        "SEC Form 20-F identifies United Microelectronics Corporation, incorporated in Taiwan.",
+        "Independent identity metadata lists CIK 0001033767 and ROR 0580qje17 for United Microelectronics Corporation."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001135951",
+      "sec_name": "DR REDDYS LABORATORIES LTD",
+      "openalex_name": "Dr. Reddy's Laboratories (India)",
+      "ror": "https://ror.org/01rkxa860",
+      "decision": "PROMOTE",
+      "reason": "SEC identifies Dr. Reddy’s Laboratories Limited as the Hyderabad, India foreign issuer, and independent identity metadata links the same public company and CIK 0001135951 to ROR 01rkxa860.",
+      "evidence": [
+        "SEC Form 20-F identifies Dr. Reddy’s Laboratories Limited in Hyderabad, Telangana, India.",
+        "Independent identity metadata lists CIK 0001135951, official website drreddys.com, and ROR 01rkxa860 for Dr. Reddy’s Laboratories."
+      ]
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001042893",
+      "sec_name": "Innovex International, Inc.",
+      "openalex_name": "Innores International",
+      "ror": "https://ror.org/005506090",
+      "decision": "REJECT",
+      "reason": "Name, spelling, organization type, and India geography do not match the SEC registrant. This is a fuzzy-name false positive."
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001091223",
+      "sec_name": "MATERIALISE NV",
+      "openalex_name": "Materialisten",
+      "ror": "https://ror.org/038a7tx93",
+      "decision": "REJECT",
+      "reason": "The candidate Materialisten in Norway is a distinct organization from Materialise NV. This is a fuzzy-name false positive."
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000001961",
+      "sec_name": "WORLDS INC",
+      "openalex_name": "WORLD",
+      "ror": "https://ror.org/04yvx5a03",
+      "decision": "REJECT",
+      "reason": "The SEC registrant is a U.S. software company formerly Worlds.com, Inc.; the generic nonprofit WORLD candidate is a different organization."
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0001062506",
+      "sec_name": "ATLANTICA INC",
+      "openalex_name": "AtlantiCare",
+      "ror": "https://ror.org/03vdj0f87",
+      "decision": "REJECT",
+      "reason": "Atlantica Inc. and AtlantiCare are distinct organizations; the candidate healthcare identity is a name-only false positive."
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000813672",
+      "sec_name": "CADENCE DESIGN SYSTEMS INC",
+      "openalex_name": "Cadence Design Systems (India)",
+      "ror": "https://ror.org/027qdw603",
+      "decision": "REJECT",
+      "reason": "The SEC registrant is the U.S. Delaware parent headquartered in San Jose, California, while the candidate is explicitly the India organization. This is a parent-versus-country-affiliate mismatch."
+    },
+    {
+      "canonical_company_id": "SEC_CIK:0000874716",
+      "sec_name": "IDEXX LABORATORIES INC /DE",
+      "openalex_name": "IDEXX Laboratories (France)",
+      "ror": "https://ror.org/04w3zk015",
+      "decision": "REJECT",
+      "reason": "The SEC registrant is the U.S. parent, while the candidate is explicitly IDEXX Laboratories (France). This is a parent-versus-country-affiliate mismatch."
+    }
+  ]
+}
