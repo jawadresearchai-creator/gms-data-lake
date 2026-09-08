@@ -6,6 +6,7 @@ on:
       - research/corporate-science-entry-v1
     paths:
       - "manuscript/corporate_science_entry_v1/**"
+      - "tools/assemble_corporate_science_manuscript_v1.py"
       - ".github/workflows/corporate-science-entry-manuscript-publish.yml"
   workflow_dispatch:
 
@@ -28,6 +29,9 @@ jobs:
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
 
+      - name: Assemble first complete manuscript
+        run: python3 tools/assemble_corporate_science_manuscript_v1.py
+
       - name: Build manuscript checkpoint manifest
         shell: bash
         run: |
@@ -38,6 +42,8 @@ jobs:
           cp manuscript/corporate_science_entry_v1/INTRO_THEORY_BLUEPRINT.md manuscript_checkpoint/
           cp manuscript/corporate_science_entry_v1/INTRO_THEORY_DRAFT.md manuscript_checkpoint/
           cp manuscript/corporate_science_entry_v1/METHODS_DRAFT.md manuscript_checkpoint/
+          cp manuscript/corporate_science_entry_v1/STRUCTURAL_CONSISTENCY_AUDIT.md manuscript_checkpoint/
+          cp manuscript/corporate_science_entry_v1/COMPLETE_MANUSCRIPT_DRAFT.md manuscript_checkpoint/
           {
             echo "project=corporate_science_entry_v1"
             echo "checkpoint=08_manuscript_draft"
@@ -48,6 +54,8 @@ jobs:
             echo "framing_status=BOUNDARY_CONDITION_REFRAMING_LOCKED"
             echo "introduction_theory_status=FULL_DRAFT_INCLUDED"
             echo "methods_status=FULL_REPRODUCIBLE_DRAFT_INCLUDED"
+            echo "structural_audit_status=PASS_WITH_EDITORIAL_CORRECTIONS"
+            echo "complete_manuscript_status=FIRST_JOURNAL_NEUTRAL_DRAFT_ASSEMBLED"
           } > manuscript_checkpoint/CHECKPOINT_MANIFEST.txt
           sha256sum manuscript_checkpoint/* | tee manuscript_checkpoint/SHA256SUMS.txt
 
