@@ -1,0 +1,57 @@
+{
+  "status": "READY_FOR_SUBMISSION_ASSEMBLY_ADMIN_METADATA_REQUIRED",
+  "manuscript_blob_context": "Technovation manuscript v2 after sample-transparency patch",
+  "counts": {
+    "abstract_words": 226,
+    "keywords": 6,
+    "main_text_words_intro_through_conclusion": 5150,
+    "words_before_references_including_admin_sections": 5492,
+    "reference_entries": 17,
+    "doi_entries": 17,
+    "admin_placeholders": 7
+  },
+  "keywords": [
+    "corporate science",
+    "entry timing",
+    "technology management",
+    "international collaboration",
+    "absorptive capacity",
+    "scientific persistence"
+  ],
+  "admin_placeholders": [
+    "[0.03, 0.97]",
+    "[Affiliations]",
+    "[Author names]",
+    "[CRediT author-contribution statement]",
+    "[Conflict-of-interest statement]",
+    "[Corresponding author details]",
+    "[Funding statement]"
+  ],
+  "prohibited_claim_hits": [],
+  "missing_required_transparency_language": [],
+  "checks": {
+    "manuscript_exists": true,
+    "firm_composition_exists": true,
+    "industry_composition_exists": true,
+    "reference_audit_exists": true,
+    "abstract_150_250": true,
+    "keywords_max_6": true,
+    "main_text_5000_10000": true,
+    "reference_entries_17": true,
+    "doi_entries_17": true,
+    "no_prohibited_claims": true,
+    "required_transparency_language_present": true
+  },
+  "scientific_gate": true,
+  "journal_format_gate": true,
+  "admin_gate": false,
+  "irreducible_scientific_risks": [
+    "The corporate adoption frontier is relative to the linked sample rather than population-complete.",
+    "The frozen primary panel contains only 21 firms.",
+    "Banking/depository institutions account for 47.4% of primary episodes; the largest firm accounts for 21.1%.",
+    "H5 is directionally stable but inference-sensitive under CRV3 and firm wild-bootstrap inference.",
+    "Entry timing remains endogenous; estimates are associational, not causal.",
+    "Publication-based entry is a proxy for observable corporate scientific production, not private R&D awareness or investment.",
+    "H3 is not estimable in the frozen primary design because within-topic support is insufficient."
+  ]
+}
