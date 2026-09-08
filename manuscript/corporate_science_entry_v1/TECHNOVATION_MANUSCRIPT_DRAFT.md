@@ -8,7 +8,7 @@
 
 Firms increasingly participate directly in emerging scientific domains, yet it remains unclear whether earlier participation produces a durable corporate scientific advantage. We examine relative entry into observable corporate scientific production and distinguish the value of entry timing from the role of pre-entry international scientific collaboration networks. The frozen primary panel contains 171 firm-topic entry episodes across 54 scientific topics and 21 linked firms; 65 episodes entered within two years of the first linked corporate entrant and 106 entered later. We combine overlap weighting on pre-entry firm characteristics with absorbed fixed effects, multiple small-cluster inference procedures, and a prespecified sensitivity grid of alternative emergence and early-entry definitions. Earlier relative entry is not associated with higher subsequent topic output or greater three-year persistence. The primary citation-impact contrast lacks sufficient within-topic support, and support-qualified sensitivity estimates are near zero. Pre-entry international network diversity also does not predict earlier relative entry. However, the interaction between earlier entry and pre-entry network diversity is positive across most frozen definitions and all leave-one-firm-out refits, although its statistical support is sensitive to the inference method. These results do not support an automatic first-mover advantage in observable corporate science. Instead, they suggest a capability-contingent view in which early participation may create an opportunity whose sustainability depends partly on the external knowledge architecture the firm brings to the domain. The evidence is associational rather than causal.
 
-**Keywords:** corporate science; entry timing; technological innovation; international collaboration; scientific networks; absorptive capacity; persistence; emerging scientific domains
+**Keywords:** corporate science; entry timing; technology management; international collaboration; absorptive capacity; scientific persistence
 
 ## 1. Introduction
 
@@ -74,9 +74,11 @@ This distinction is important for entry-timing theory. If timing benefits are ca
 
 ### 3.1 Data and unit of analysis
 
-We use the frozen GMS `sec_openalex_v10` cross-domain production release, which links SEC issuer information with OpenAlex-derived corporate scientific activity. The release was frozen on 8 September 2026 and classified by the pipeline as verified/research-ready with zero recorded QA errors. The analysis uses global OpenAlex topic-year trajectories together with firm-topic output, firm-country collaboration, company-wide research and citation histories, and SEC issuer metadata.
+We use the frozen GMS `sec_openalex_v10` cross-domain production release, which links SEC issuer information with OpenAlex-derived corporate scientific activity (Priem et al., 2022). The release was frozen on 8 September 2026 and classified by the pipeline as verified/research-ready with zero recorded QA errors. We use only organization links retained in the production bridge; those bridge records preserve match-method and confidence fields, country-consistency diagnostics, reclassification decisions, and production-approval metadata. The analysis does not re-estimate those organization links. The analysis uses global OpenAlex topic-year trajectories together with firm-topic output, firm-country collaboration, company-wide research and citation histories, and SEC issuer metadata.
 
 The unit of analysis is a **firm × scientific-topic entry episode**. The primary panel contains 171 episodes across 54 scientific topics and 21 linked firms. Sixty-five episodes are classified as early and 106 as later. The observational structure provides within-topic and within-firm variation, but the number of firms remains modest; consequently, we use multiple small-cluster inference procedures and limit external-validity claims to the linked-firm sample.
+
+The linked-firm sample is also unevenly distributed across industries. SIC 60 depository/banking firms contribute 81 of 171 episodes (47.4%), chemicals/pharmaceutical firms contribute 35 (20.5%), and the largest single firm contributes 36 episodes (21.1%). Firm fixed effects and leave-one-firm-out checks reduce the risk that stable firm characteristics or one firm drive the within-sample estimates, but they do not make the sample representative of the broader corporate population. We therefore report the complete firm and SIC composition as reviewer-facing supplementary tables and treat industry concentration as an external-validity limitation.
 
 ### 3.2 Global scientific emergence and relative corporate entry
 
@@ -110,7 +112,7 @@ H4 reverses the model orientation and treats early-entry status as the dependent
 
 ### 3.5 Observed-selection adjustment
 
-Because early and later entrants differ on observed pre-entry characteristics, we use overlap weighting based on a regularized logistic propensity model. The model includes pre-entry research output, citations, output trajectory, collaborator-country count, network diversity measures, collaboration volume, an indicator for observed network data, and two-digit SIC indicators. Propensity scores are truncated to [0.03, 0.97]. Early entrants receive weight \(1-\hat p\); later entrants receive weight \(\hat p\), with weights normalized to mean one.
+Because early and later entrants differ on observed pre-entry characteristics, we use overlap weighting based on a regularized logistic propensity model, following the overlap-weighting logic of Li, Thomas, and Li (2019). The model includes pre-entry research output, citations, output trajectory, collaborator-country count, network diversity measures, collaboration volume, an indicator for observed network data, and two-digit SIC indicators. Propensity scores are truncated to [0.03, 0.97]. Early entrants receive weight \(1-\hat p\); later entrants receive weight \(\hat p\), with weights normalized to mean one.
 
 Field age and global topic scale at the firm's entry year are intentionally excluded from the primary propensity model because they are mechanically related to relative timing and would partially adjust away the treatment construct. Post-weight observed balance is strong: the overlap-weight effective sample size is 134.0, and the maximum absolute weighted standardized mean difference is 0.044.
 
@@ -128,11 +130,28 @@ Field age and global topic scale at the firm's entry year are intentionally excl
 
 Across individual pre-entry covariates, raw standardized differences as large as approximately 0.34 in magnitude are reduced to no more than approximately 0.044 after weighting.
 
+**Table 1B. Industry composition of the frozen primary panel**
+
+| SIC2 / group | Firms | Episodes | Share of episodes |
+|---|---:|---:|---:|
+| 60 — Depository institutions/banking | 6 | 81 | 47.4% |
+| 28 — Chemicals and pharmaceuticals | 5 | 35 | 20.5% |
+| 27 — Printing and publishing | 1 | 20 | 11.7% |
+| SIC unavailable | 2 | 9 | 5.3% |
+| 73 — Business/computer services | 1 | 7 | 4.1% |
+| 36 — Electronic equipment | 1 | 6 | 3.5% |
+| 80 — Health services | 2 | 6 | 3.5% |
+| 49 — Electric/gas utilities | 1 | 3 | 1.8% |
+| 13 — Oil and gas extraction | 1 | 2 | 1.2% |
+| 35 — Industrial/computer machinery | 1 | 2 | 1.2% |
+
+The complete 21-firm composition, including ticker, SIC description, early/later counts, and episode shares, is retained in the reproducibility package.
+
 ### 3.6 Fixed effects and inference
 
 Primary H1, H2, and H5 models use overlap-weighted absorbed fixed effects for topic, firm, and entry year. H4 uses topic and firm fixed effects but excludes entry-year fixed effects because calendar timing is intrinsic to the dependent construct. H2 and H5 persistence models are estimated as fixed-effect linear-probability specifications.
 
-Primary inference clusters by scientific topic using CRV1. Given 21 firms and 54 topics, we additionally report topic CRV3, two-way topic-and-firm CRV1, and a firm-cluster wild bootstrap with 9,999 replications and Webb weights. H5 is further examined under alternative prespecified fixed-effect structures and by leaving each firm out in turn.
+Primary inference clusters by scientific topic using CRV1. Given 21 firms and 54 topics, we additionally report topic CRV3, two-way topic-and-firm CRV1, and a firm-cluster wild bootstrap with 9,999 replications and Webb weights; these additional procedures reflect the known sensitivity of cluster-robust inference when cluster counts or cluster sizes are limited (MacKinnon & Webb, 2017, 2018). H5 is further examined under alternative prespecified fixed-effect structures and by leaving each firm out in turn.
 
 The purpose of these procedures is to characterize uncertainty rather than to select whichever inference method produces statistical significance.
 
@@ -235,7 +254,7 @@ The results instead suggest that the managerial decision has at least two dimens
 
 Several limitations define the paper's scope. First, the corporate adoption frontier is relative to the linked firms; it is not a population-complete record of the first corporate entrant in every topic. Future work should broaden validated firm coverage or construct a more population-complete corporate frontier.
 
-Second, the primary analysis includes only 21 firms. Firm-topic variation supports within-firm and within-topic comparisons, and leave-one-firm-out analysis addresses single-firm dependence, but the sample does not support universal claims about corporate behavior. Replication across a broader corporate population is important.
+Second, the primary analysis includes only 21 firms. Firm-topic variation supports within-firm and within-topic comparisons, and leave-one-firm-out analysis addresses single-firm dependence, but the sample does not support universal claims about corporate behavior. The sample is also industry-concentrated: banking/depository institutions account for 47.4% of primary episodes and the largest firm accounts for 21.1%. These concentrations are transparent and partly addressed by firm fixed effects and leave-one-firm-out analysis, but they remain an external-validity limitation rather than a problem that statistical adjustment can remove. Replication across a broader corporate population is important.
 
 Third, publication-based entry captures observable scientific production rather than the first moment at which a firm becomes aware of or privately invests in a topic. Firms may conduct unpublished R&D, hire scientists, license knowledge, acquire startups, or collaborate privately before appearing in publication data.
 
@@ -283,6 +302,12 @@ Cohen, W. M., & Levinthal, D. A. (1990). Absorptive capacity: A new perspective 
 
 Fabrizio, K. R. (2009). Absorptive capacity and the search for innovation. *Research Policy, 38*(2), 255–267. https://doi.org/10.1016/j.respol.2008.10.023
 
+Li, F., Thomas, L. E., & Li, F. (2019). Addressing extreme propensity scores via the overlap weights. *American Journal of Epidemiology, 188*(1), 250–257. https://doi.org/10.1093/aje/kwy201
+
+MacKinnon, J. G., & Webb, M. D. (2017). Wild bootstrap inference for wildly different cluster sizes. *Journal of Applied Econometrics, 32*(2), 233–254. https://doi.org/10.1002/jae.2508
+
+MacKinnon, J. G., & Webb, M. D. (2018). The wild bootstrap for few (treated) clusters. *The Econometrics Journal, 21*(2), 114–135. https://doi.org/10.1111/ectj.12107
+
 Lieberman, M. B., & Montgomery, D. B. (1988). First-mover advantages. *Strategic Management Journal, 9*(S1), 41–58. https://doi.org/10.1002/smj.4250090706
 
 Lieberman, M. B., & Montgomery, D. B. (1998). First-mover (dis)advantages: Retrospective and link with the resource-based view. *Strategic Management Journal, 19*(12), 1111–1125. https://doi.org/10.1002/(SICI)1097-0266(1998120)19:12<1111::AID-SMJ21>3.0.CO;2-W
@@ -292,6 +317,8 @@ Moon, H., Di Benedetto, C. A., & Kim, S. K. (2022). The effect of network tie po
 Najafi-Tavani, S., Najafi-Tavani, Z., Naudé, P., Oghazi, P., & Zeynaloo, E. (2018). How collaborative innovation networks affect new product performance: Product innovation capability, process innovation capability, and absorptive capacity. *Industrial Marketing Management, 73*, 193–205. https://doi.org/10.1016/j.indmarman.2018.02.009
 
 Park, G., Shin, S. R., & Choy, M. (2020). Early mover (dis)advantages and knowledge spillover effects on blockchain startups' funding and innovation performance. *Journal of Business Research, 109*, 64–75. https://doi.org/10.1016/j.jbusres.2019.11.068
+
+Priem, J., Piwowar, H., & Orr, R. (2022). OpenAlex: A fully-open index of scholarly works, authors, venues, institutions, and concepts. *arXiv*. https://doi.org/10.48550/arXiv.2205.01833
 
 Sabatier, M., & Chollet, B. (2017). Is there a first mover advantage in science? Pioneering behavior and scientific production in nanotechnology. *Research Policy, 46*(2), 522–533. https://doi.org/10.1016/j.respol.2017.01.003
 
