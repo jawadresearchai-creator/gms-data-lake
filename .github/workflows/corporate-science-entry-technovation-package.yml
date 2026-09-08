@@ -6,6 +6,8 @@ on:
       - research/corporate-science-entry-v1
     paths:
       - "manuscript/corporate_science_entry_v1/TECHNOVATION_*"
+      - "manuscript/corporate_science_entry_v1/REFERENCE_DOI_AUDIT.md"
+      - "manuscript/corporate_science_entry_v1/FINAL_TECHNOVATION_*"
       - "tools/generate_corporate_science_timing_figure_v1.py"
       - ".github/workflows/corporate-science-entry-technovation-package.yml"
   workflow_dispatch:
@@ -14,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: corporate-science-entry-technovation-package-v1
+  group: corporate-science-entry-technovation-package-v2
   cancel-in-progress: false
 
 jobs:
@@ -47,12 +49,17 @@ jobs:
           cp manuscript/corporate_science_entry_v1/TECHNOVATION_MANUSCRIPT_DRAFT.md technovation_package/
           cp manuscript/corporate_science_entry_v1/TECHNOVATION_SUBMISSION_BLUEPRINT.md technovation_package/
           cp manuscript/corporate_science_entry_v1/TECHNOVATION_SENSITIVITY_SUMMARY.csv technovation_package/
+          cp manuscript/corporate_science_entry_v1/TECHNOVATION_FIRM_COMPOSITION.csv technovation_package/
+          cp manuscript/corporate_science_entry_v1/TECHNOVATION_INDUSTRY_COMPOSITION.csv technovation_package/
           cp manuscript/corporate_science_entry_v1/JOURNAL_TARGET_DECISION.md technovation_package/
           cp manuscript/corporate_science_entry_v1/HOSTILE_REVIEWER_AUDIT.md technovation_package/
           cp manuscript/corporate_science_entry_v1/STRUCTURAL_CONSISTENCY_AUDIT.md technovation_package/
+          cp manuscript/corporate_science_entry_v1/REFERENCE_DOI_AUDIT.md technovation_package/
+          cp manuscript/corporate_science_entry_v1/FINAL_TECHNOVATION_AUDIT_V2.md technovation_package/
+          cp manuscript/corporate_science_entry_v1/FINAL_TECHNOVATION_QA.json technovation_package/
           {
             echo "project=corporate_science_entry_v1"
-            echo "checkpoint=09_technovation_draft"
+            echo "checkpoint=10_technovation_submission_v2"
             echo "git_sha=${GITHUB_SHA}"
             echo "run_id=${GITHUB_RUN_ID}"
             echo "generated_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -60,7 +67,10 @@ jobs:
             echo "analysis_status=FINAL_ANALYSIS_LOCKED"
             echo "scientific_language=ASSOCIATIONAL_NOT_CAUSAL"
             echo "h5_status=QUALIFIED_DIRECTIONAL_SUPPORT_INFERENCE_SENSITIVE"
-            echo "manuscript_status=TECHNOVATION_DERIVATIVE_V1"
+            echo "scientific_qa=PASS"
+            echo "journal_format_qa=PASS"
+            echo "administrative_status=METADATA_REQUIRED"
+            echo "manuscript_status=TECHNOVATION_SUBMISSION_V2"
           } > technovation_package/PACKAGE_MANIFEST.txt
 
       - name: Stage immutable locked results pack
@@ -92,16 +102,25 @@ jobs:
           test -s technovation_package/FIGURE_1_RESEARCH_DESIGN_TIMING.png
           test -s technovation_package/FIGURE_2_H5_SENSITIVITY_PROFILE.png
           test -s technovation_package/FIGURE_3_H5_LEAVE_ONE_FIRM_OUT.png
+          test -s technovation_package/TECHNOVATION_FIRM_COMPOSITION.csv
+          test -s technovation_package/TECHNOVATION_INDUSTRY_COMPOSITION.csv
+          test -s technovation_package/REFERENCE_DOI_AUDIT.md
+          test -s technovation_package/FINAL_TECHNOVATION_AUDIT_V2.md
+          test -s technovation_package/FINAL_TECHNOVATION_QA.json
+          grep -q '"scientific_gate": true' technovation_package/FINAL_TECHNOVATION_QA.json
+          grep -q '"journal_format_gate": true' technovation_package/FINAL_TECHNOVATION_QA.json
+          grep -q '"admin_placeholders": 6' technovation_package/FINAL_TECHNOVATION_QA.json
           grep -q "171" technovation_package/TECHNOVATION_MANUSCRIPT_DRAFT.md
           grep -q "54 scientific topics" technovation_package/TECHNOVATION_MANUSCRIPT_DRAFT.md
           grep -q "21 linked firms" technovation_package/TECHNOVATION_MANUSCRIPT_DRAFT.md
+          grep -q "47.4%" technovation_package/TECHNOVATION_MANUSCRIPT_DRAFT.md
           grep -q "qualified directional support" technovation_package/TECHNOVATION_MANUSCRIPT_DRAFT.md
           ! grep -qi "H5 is confirmed" technovation_package/TECHNOVATION_MANUSCRIPT_DRAFT.md
           ! grep -qi "H5 is robustly significant" technovation_package/TECHNOVATION_MANUSCRIPT_DRAFT.md
           ! grep -qi "early entry causes higher persistence" technovation_package/TECHNOVATION_MANUSCRIPT_DRAFT.md
           sha256sum technovation_package/* | tee technovation_package/SHA256SUMS.txt
 
-      - name: Publish immutable Technovation checkpoint to Drive
+      - name: Publish immutable Technovation v2 checkpoint to Drive
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive
@@ -112,14 +131,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TARGET="gdrive:03_RESEARCH/projects/corporate_science_entry_v1/09_technovation_draft/run_${GITHUB_RUN_ID}"
+          TARGET="gdrive:03_RESEARCH/projects/corporate_science_entry_v1/10_technovation_submission_v2/run_${GITHUB_RUN_ID}"
           rclone copy technovation_package "$TARGET" --stats 0
           printf '%s\n' "$TARGET"
           rclone lsf "$TARGET"
 
-      - name: Upload Technovation artifact
+      - name: Upload Technovation v2 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: corporate-science-entry-technovation-${{ github.run_id }}
+          name: corporate-science-entry-technovation-v2-${{ github.run_id }}
           path: technovation_package/
           retention-days: 30
