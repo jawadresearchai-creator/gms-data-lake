@@ -22,20 +22,16 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install analytics dependencies
         run: pip install -r requirements-analytics.txt
-
       - name: Install rclone
         run: |
           curl -fsSL https://rclone.org/install.sh | sudo bash
           rclone version
-
       - name: Stage frozen GMS research inputs
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
@@ -54,10 +50,8 @@ jobs:
           rclone copyto gdrive:03_RESEARCH/cross_domain/v10/COMPANY_RESEARCH_YEAR/part-0000.parquet input/company_research_year.parquet --stats 0
           rclone copyto gdrive:03_RESEARCH/cross_domain/v10/COMPANY_CITATION_YEAR/part-0000.parquet input/company_citation_year.parquet --stats 0
           ls -lh input
-
       - name: Run empirical feasibility gate
-        run: python research/corporate_science_entry_v1/feasibility.py
-
+        run: python research/corporate_science_entry_v1/feasibility_v2.py
       - name: Publish immutable research checkpoint to Drive
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
@@ -73,7 +67,6 @@ jobs:
           rclone copy output "$TARGET" --stats 0
           printf '%s\n' "$TARGET"
           rclone lsf "$TARGET"
-
       - name: Upload feasibility artifact
         uses: actions/upload-artifact@v4
         with:
