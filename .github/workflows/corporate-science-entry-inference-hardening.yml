@@ -1,0 +1,82 @@
+name: Corporate Science Entry Inference Hardening
+
+on:
+  push:
+    branches:
+      - research/corporate-science-entry-v1
+    paths:
+      - "tools/corporate_science_inference_hardening_v1.py"
+      - ".github/workflows/corporate-science-entry-inference-hardening.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corporate-science-entry-inference-hardening-v1
+  cancel-in-progress: false
+
+jobs:
+  inference-hardening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pinned analysis dependencies
+        run: |
+          pip install pyfixest==0.60.0 pandas pyarrow scipy scikit-learn wildboottest==0.3.2
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Stage exact hardened panel
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/03_estimator_hardening/run_34225117248/analysis_panel_hardened.csv input/analysis_panel_hardened.csv --stats 0
+          sha256sum input/analysis_panel_hardened.csv | tee input_sha256.txt
+
+      - name: Run inference hardening
+        run: python tools/corporate_science_inference_hardening_v1.py
+
+      - name: Attach checksum
+        run: cp input_sha256.txt output_inference/input_sha256.txt
+
+      - name: Publish immutable inference checkpoint to Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="gdrive:03_RESEARCH/projects/corporate_science_entry_v1/04_inference_hardening/run_${GITHUB_RUN_ID}"
+          rclone copy output_inference "$TARGET" --stats 0
+          printf '%s\n' "$TARGET"
+          rclone lsf "$TARGET"
+
+      - name: Upload inference artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: corporate-science-entry-inference-hardening-${{ github.run_id }}
+          path: output_inference/
+          retention-days: 30
