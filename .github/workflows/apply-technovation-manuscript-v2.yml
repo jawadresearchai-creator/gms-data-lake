@@ -1,0 +1,50 @@
+name: Apply Technovation Manuscript V2 Patch
+
+on:
+  push:
+    branches:
+      - research/corporate-science-entry-v1
+    paths:
+      - "tools/apply_technovation_manuscript_v2_patch.py"
+      - ".github/workflows/apply-technovation-manuscript-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-technovation-manuscript-v2
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/corporate-science-entry-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Apply exact manuscript patch
+        run: python tools/apply_technovation_manuscript_v2_patch.py
+
+      - name: Show controlled diff
+        run: git diff --check && git diff -- manuscript/corporate_science_entry_v1/TECHNOVATION_MANUSCRIPT_DRAFT.md
+
+      - name: Commit revised manuscript
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "gms-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add manuscript/corporate_science_entry_v1/TECHNOVATION_MANUSCRIPT_DRAFT.md
+          if git diff --cached --quiet; then
+            echo "No manuscript change to commit"
+          else
+            git commit -m "Revise Technovation manuscript for sample transparency and methods citations"
+            git push origin HEAD:research/corporate-science-entry-v1
+          fi
