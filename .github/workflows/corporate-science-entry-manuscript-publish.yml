@@ -43,6 +43,8 @@ jobs:
           cp manuscript/corporate_science_entry_v1/INTRO_THEORY_DRAFT.md manuscript_checkpoint/
           cp manuscript/corporate_science_entry_v1/METHODS_DRAFT.md manuscript_checkpoint/
           cp manuscript/corporate_science_entry_v1/STRUCTURAL_CONSISTENCY_AUDIT.md manuscript_checkpoint/
+          cp manuscript/corporate_science_entry_v1/HOSTILE_REVIEWER_AUDIT.md manuscript_checkpoint/
+          cp manuscript/corporate_science_entry_v1/JOURNAL_TARGET_DECISION.md manuscript_checkpoint/
           cp manuscript/corporate_science_entry_v1/COMPLETE_MANUSCRIPT_DRAFT.md manuscript_checkpoint/
           {
             echo "project=corporate_science_entry_v1"
@@ -55,6 +57,8 @@ jobs:
             echo "introduction_theory_status=FULL_DRAFT_INCLUDED"
             echo "methods_status=FULL_REPRODUCIBLE_DRAFT_INCLUDED"
             echo "structural_audit_status=PASS_WITH_EDITORIAL_CORRECTIONS"
+            echo "hostile_review_status=PROMISING_PUBLISHABLE_WITH_REPOSITIONING"
+            echo "journal_target=TECHNOVATION"
             echo "complete_manuscript_status=FIRST_JOURNAL_NEUTRAL_DRAFT_ASSEMBLED"
           } > manuscript_checkpoint/CHECKPOINT_MANIFEST.txt
           sha256sum manuscript_checkpoint/* | tee manuscript_checkpoint/SHA256SUMS.txt
