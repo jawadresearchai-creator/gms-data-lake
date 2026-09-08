@@ -36,6 +36,7 @@ jobs:
           cp manuscript/corporate_science_entry_v1/RESULTS_DISCUSSION_DRAFT.md manuscript_checkpoint/
           cp manuscript/corporate_science_entry_v1/REFRAMING_LOCK.md manuscript_checkpoint/
           cp manuscript/corporate_science_entry_v1/INTRO_THEORY_BLUEPRINT.md manuscript_checkpoint/
+          cp manuscript/corporate_science_entry_v1/INTRO_THEORY_DRAFT.md manuscript_checkpoint/
           {
             echo "project=corporate_science_entry_v1"
             echo "checkpoint=08_manuscript_draft"
@@ -44,6 +45,7 @@ jobs:
             echo "generated_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "analysis_status=FINAL_ANALYSIS_LOCKED"
             echo "framing_status=BOUNDARY_CONDITION_REFRAMING_LOCKED"
+            echo "introduction_theory_status=FULL_DRAFT_INCLUDED"
           } > manuscript_checkpoint/CHECKPOINT_MANIFEST.txt
           sha256sum manuscript_checkpoint/* | tee manuscript_checkpoint/SHA256SUMS.txt
 
