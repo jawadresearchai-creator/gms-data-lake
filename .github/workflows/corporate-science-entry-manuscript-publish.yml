@@ -1,0 +1,85 @@
+name: Corporate Science Entry Manuscript Checkpoint
+
+on:
+  push:
+    branches:
+      - research/corporate-science-entry-v1
+    paths:
+      - "manuscript/corporate_science_entry_v1/**"
+      - ".github/workflows/corporate-science-entry-manuscript-publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corporate-science-entry-manuscript-checkpoint-v1
+  cancel-in-progress: false
+
+jobs:
+  publish-manuscript:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Build manuscript checkpoint manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p manuscript_checkpoint
+          cp manuscript/corporate_science_entry_v1/RESULTS_DISCUSSION_DRAFT.md manuscript_checkpoint/
+          cp manuscript/corporate_science_entry_v1/REFRAMING_LOCK.md manuscript_checkpoint/
+          cp manuscript/corporate_science_entry_v1/INTRO_THEORY_BLUEPRINT.md manuscript_checkpoint/
+          {
+            echo "project=corporate_science_entry_v1"
+            echo "checkpoint=08_manuscript_draft"
+            echo "git_sha=${GITHUB_SHA}"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "generated_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "analysis_status=FINAL_ANALYSIS_LOCKED"
+            echo "framing_status=BOUNDARY_CONDITION_REFRAMING_LOCKED"
+          } > manuscript_checkpoint/CHECKPOINT_MANIFEST.txt
+          sha256sum manuscript_checkpoint/* | tee manuscript_checkpoint/SHA256SUMS.txt
+
+      - name: Stage immutable claim lock from analysis pack
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/07_reviewer_results_pack/run_34230017364/MANUSCRIPT_CLAIMS_LOCK.json manuscript_checkpoint/MANUSCRIPT_CLAIMS_LOCK.json --stats 0
+          sha256sum manuscript_checkpoint/MANUSCRIPT_CLAIMS_LOCK.json >> manuscript_checkpoint/SHA256SUMS.txt
+
+      - name: Publish immutable manuscript checkpoint to Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="gdrive:03_RESEARCH/projects/corporate_science_entry_v1/08_manuscript_draft/run_${GITHUB_RUN_ID}"
+          rclone copy manuscript_checkpoint "$TARGET" --stats 0
+          printf '%s\n' "$TARGET"
+          rclone lsf "$TARGET"
+
+      - name: Upload manuscript checkpoint artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: corporate-science-entry-manuscript-${{ github.run_id }}
+          path: manuscript_checkpoint/
+          retention-days: 30
