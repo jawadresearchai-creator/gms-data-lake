@@ -1,0 +1,83 @@
+name: Corporate Science Entry Design Freeze
+
+on:
+  push:
+    branches:
+      - research/corporate-science-entry-v1
+    paths:
+      - "tools/corporate_science_design_freeze_v1.py"
+      - ".github/workflows/corporate-science-entry-design-freeze.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corporate-science-entry-design-freeze-v1
+  cancel-in-progress: false
+
+jobs:
+  design-freeze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install analytics dependencies
+        run: pip install -r requirements-analytics.txt
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Stage frozen GMS inputs
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input
+          rclone copyto gdrive:03_RESEARCH/openalex/v1/marts/WORK_YEAR_TOPIC/part-0000.parquet input/work_year_topic.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v10/COMPANY_TOPIC_YEAR/part-0000.parquet input/company_topic_year.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v10/COMPANY_COLLABORATION_YEAR/part-0000.parquet input/company_collaboration_year.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v10/COMPANY_RESEARCH_YEAR/part-0000.parquet input/company_research_year.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v10/COMPANY_CITATION_YEAR/part-0000.parquet input/company_citation_year.parquet --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v1/SEC_ISSUER_METADATA/part-0000.parquet input/sec_issuer_metadata.parquet --stats 0
+          ls -lh input
+
+      - name: Freeze primary design and run pretrend diagnostics
+        run: python tools/corporate_science_design_freeze_v1.py
+
+      - name: Publish immutable design checkpoint to Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="gdrive:03_RESEARCH/projects/corporate_science_entry_v1/01_design_freeze/run_${GITHUB_RUN_ID}"
+          rclone copy output_design "$TARGET" --stats 0
+          printf '%s\n' "$TARGET"
+          rclone lsf "$TARGET"
+
+      - name: Upload design-freeze artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: corporate-science-entry-design-freeze-${{ github.run_id }}
+          path: output_design/
+          retention-days: 30
