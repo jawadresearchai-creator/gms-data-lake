@@ -13,7 +13,6 @@ REF_AUDIT = ROOT / "REFERENCE_DOI_AUDIT.md"
 text = MANUSCRIPT.read_text(encoding="utf-8")
 
 def words(s: str) -> list[str]:
-    # Count human-readable word tokens while ignoring Markdown punctuation.
     return re.findall(r"\b[\w’'-]+\b", s, flags=re.UNICODE)
 
 def between(s: str, start: str, end: str) -> str:
@@ -37,8 +36,16 @@ reference_entries = [p.strip() for p in re.split(r"\n\s*\n", refs)[1:] if p.stri
 doi_matches = re.findall(r"https://doi\.org/([^\s]+)", refs, flags=re.I)
 
 admin_placeholders = sorted(set(re.findall(r"\[[^\]\n]+\]", text)))
-# Figure-location placeholders are intentional manuscript-production markers, not admin blockers.
-admin_placeholders = [p for p in admin_placeholders if not p.lower().startswith("[figure ")]
+# Figure-location markers and numeric interval notation are manuscript/scientific syntax,
+# not administrative placeholders.
+def is_admin_placeholder(token: str) -> bool:
+    low = token.lower()
+    if low.startswith("[figure "):
+        return False
+    if re.fullmatch(r"\[\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\]", token):
+        return False
+    return True
+admin_placeholders = [p for p in admin_placeholders if is_admin_placeholder(p)]
 
 prohibited = [
     "early entry causes higher persistence",
