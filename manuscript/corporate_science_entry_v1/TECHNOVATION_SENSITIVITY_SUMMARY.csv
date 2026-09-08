@@ -1,0 +1,11 @@
+evidence_dimension,locked_summary
+Gate-passing frozen designs,13
+H1 +3 output,"Approximately 77% negative; median estimate approximately -0.062"
+H2 +3 persistence,11 of 13 negative
+H2 +5 persistence,13 of 13 negative
+H4 pre-entry network diversity predictor,13 of 13 negative
+H5 +3 interaction,12 of 13 positive
+H5 +5 interaction,Approximately 76.9% positive
+H5 leave-one-firm-out,21 of 21 positive
+H5 topic-CRV3 p<0.10 across +3 grid,0 designs
+H3 support-qualified sensitivity,"4 designs; estimates -0.151, -0.010, 0.003, 0.022; median approximately -0.004; no significant signal"
