@@ -8,7 +8,7 @@
     "words_before_references_including_admin_sections": 5492,
     "reference_entries": 17,
     "doi_entries": 17,
-    "admin_placeholders": 7
+    "admin_placeholders": 6
   },
   "keywords": [
     "corporate science",
@@ -19,7 +19,6 @@
     "scientific persistence"
   ],
   "admin_placeholders": [
-    "[0.03, 0.97]",
     "[Affiliations]",
     "[Author names]",
     "[CRediT author-contribution statement]",

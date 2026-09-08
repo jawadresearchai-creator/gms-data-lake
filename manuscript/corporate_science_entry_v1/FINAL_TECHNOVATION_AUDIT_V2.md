@@ -35,7 +35,6 @@ These limitations should remain visible. In particular, the manuscript must not 
 
 ## Administrative submission blockers
 
-- `[0.03, 0.97]`
 - `[Affiliations]`
 - `[Author names]`
 - `[CRediT author-contribution statement]`
