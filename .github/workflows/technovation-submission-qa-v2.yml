@@ -1,0 +1,53 @@
+name: Technovation Submission QA V2
+
+on:
+  push:
+    branches:
+      - research/corporate-science-entry-v1
+    paths:
+      - "tools/technovation_submission_qa_v2.py"
+      - ".github/workflows/technovation-submission-qa-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: technovation-submission-qa-v2
+  cancel-in-progress: false
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/corporate-science-entry-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run deterministic submission QA
+        run: python tools/technovation_submission_qa_v2.py
+
+      - name: Show generated audit
+        run: |
+          cat manuscript/corporate_science_entry_v1/FINAL_TECHNOVATION_AUDIT_V2.md
+          cat manuscript/corporate_science_entry_v1/FINAL_TECHNOVATION_QA.json
+
+      - name: Commit final QA artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "gms-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add manuscript/corporate_science_entry_v1/FINAL_TECHNOVATION_AUDIT_V2.md \
+                  manuscript/corporate_science_entry_v1/FINAL_TECHNOVATION_QA.json
+          if git diff --cached --quiet; then
+            echo "No QA artifact change to commit"
+          else
+            git commit -m "Lock final Technovation submission QA"
+            git push origin HEAD:research/corporate-science-entry-v1
+          fi
