@@ -1,0 +1,85 @@
+name: Corporate Science Entry Hypothesis Analysis
+
+on:
+  push:
+    branches:
+      - research/corporate-science-entry-v1
+    paths:
+      - "tools/corporate_science_hypothesis_analysis_v1.py"
+      - ".github/workflows/corporate-science-entry-hypothesis-analysis.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corporate-science-entry-hypothesis-analysis-v1
+  cancel-in-progress: false
+
+jobs:
+  hypotheses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install analysis dependencies
+        run: |
+          pip install -r requirements-analytics.txt
+          pip install pandas pyarrow scipy statsmodels scikit-learn wildboottest
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Stage exact frozen design panel
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/01_design_freeze/run_34221681840/primary_analysis_panel.csv input/primary_analysis_panel.csv --stats 0
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/01_design_freeze/run_34221681840/design_freeze.json input/design_freeze.json --stats 0
+          rclone copyto gdrive:03_RESEARCH/cross_domain/v10/COMPANY_RESEARCH_YEAR/part-0000.parquet input/company_research_year.parquet --stats 0
+          sha256sum input/primary_analysis_panel.csv input/design_freeze.json input/company_research_year.parquet | tee input_sha256.txt
+
+      - name: Estimate frozen H1-H5
+        run: python tools/corporate_science_hypothesis_analysis_v1.py
+
+      - name: Attach input checksums
+        run: cp input_sha256.txt output_hypotheses/input_sha256.txt
+
+      - name: Publish immutable hypothesis checkpoint to Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="gdrive:03_RESEARCH/projects/corporate_science_entry_v1/02_hypothesis_estimation/run_${GITHUB_RUN_ID}"
+          rclone copy output_hypotheses "$TARGET" --stats 0
+          printf '%s\n' "$TARGET"
+          rclone lsf "$TARGET"
+
+      - name: Upload hypothesis artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: corporate-science-entry-hypotheses-${{ github.run_id }}
+          path: output_hypotheses/
+          retention-days: 30
