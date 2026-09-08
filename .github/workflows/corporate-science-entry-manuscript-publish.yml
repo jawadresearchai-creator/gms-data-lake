@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/07_reviewer_results_pack/run_34230017364/MANUSCRIPT_CLAIMS_LOCK.json manuscript_checkpoint/MANUSCRIPT_CLAIMS_LOCK.json --stats 0
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/07_results_pack/run_34230017364/MANUSCRIPT_CLAIMS_LOCK.json manuscript_checkpoint/MANUSCRIPT_CLAIMS_LOCK.json --stats 0
           sha256sum manuscript_checkpoint/MANUSCRIPT_CLAIMS_LOCK.json >> manuscript_checkpoint/SHA256SUMS.txt
 
       - name: Publish immutable manuscript checkpoint to Drive
