@@ -6,6 +6,7 @@ on:
       - research/corporate-science-entry-v1
     paths:
       - "research/corporate_science_entry_v1/**"
+      - "tools/corporate_science_entry_feasibility_v3.py"
       - ".github/workflows/corporate-science-entry-feasibility.yml"
   workflow_dispatch:
 
@@ -51,7 +52,7 @@ jobs:
           rclone copyto gdrive:03_RESEARCH/cross_domain/v10/COMPANY_CITATION_YEAR/part-0000.parquet input/company_citation_year.parquet --stats 0
           ls -lh input
       - name: Run empirical feasibility gate
-        run: python research/corporate_science_entry_v1/feasibility_v2.py
+        run: python tools/corporate_science_entry_feasibility_v3.py
       - name: Publish immutable research checkpoint to Drive
         env:
           RCLONE_CONFIG_GDRIVE_TYPE: drive
