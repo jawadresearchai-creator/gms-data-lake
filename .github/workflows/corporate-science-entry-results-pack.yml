@@ -1,0 +1,87 @@
+name: Corporate Science Entry Reviewer Results Pack
+
+on:
+  push:
+    branches:
+      - research/corporate-science-entry-v1
+    paths:
+      - "tools/corporate_science_results_pack_v1.py"
+      - ".github/workflows/corporate-science-entry-results-pack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corporate-science-entry-results-pack-v1
+  cancel-in-progress: false
+
+jobs:
+  results-pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install results-pack dependencies
+        run: pip install pandas numpy matplotlib
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Stage immutable locked analysis outputs
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/03_estimator_hardening/run_34225117248/analysis_panel_hardened.csv input/analysis_panel_hardened.csv --stats 0
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/03_estimator_hardening/run_34225117248/overlap_balance_hardened.csv input/overlap_balance_hardened.csv --stats 0
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/04_inference_hardening/run_34225440141/inference_hardening.json input/inference_hardening.json --stats 0
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/04_inference_hardening/run_34225440141/h5_leave_one_firm_out.csv input/h5_leave_one_firm_out.csv --stats 0
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/05_sensitivity_analysis/run_34228719850/sensitivity_results.csv input/sensitivity_results.csv --stats 0
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/06_final_analysis_lock/run_34229475094/final_analysis_lock.json input/final_analysis_lock.json --stats 0
+          rclone copyto gdrive:03_RESEARCH/projects/corporate_science_entry_v1/06_final_analysis_lock/run_34229475094/h3_sensitivity_only.csv input/h3_sensitivity_only.csv --stats 0
+          sha256sum input/* | sort | tee input_sha256.txt
+
+      - name: Build reviewer-facing tables and figures
+        run: python tools/corporate_science_results_pack_v1.py
+
+      - name: Attach input checksums
+        run: cp input_sha256.txt output_results_pack/input_sha256.txt
+
+      - name: Publish immutable results pack to Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="gdrive:03_RESEARCH/projects/corporate_science_entry_v1/07_results_pack/run_${GITHUB_RUN_ID}"
+          rclone copy output_results_pack "$TARGET" --stats 0
+          printf '%s\n' "$TARGET"
+          rclone lsf "$TARGET"
+
+      - name: Upload results-pack artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: corporate-science-entry-results-pack-${{ github.run_id }}
+          path: output_results_pack/
+          retention-days: 30
