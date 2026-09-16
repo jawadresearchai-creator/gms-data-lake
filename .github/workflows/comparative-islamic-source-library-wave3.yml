@@ -1,0 +1,124 @@
+name: Comparative Islamic source library acquisition wave 3
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/comparative-islamic-source-library-wave3.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  expand-multivolume:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: Mirat_al-Uqul
+            seed: princeton_aco001300
+            dest: 01_Priority_1_Shia_Primary/02_Gradings_and_Rijal/Mirat_al-Uqul
+          - key: Mujam_Rijal_al-Hadith
+            seed: princeton_aco003857
+            dest: 01_Priority_1_Shia_Primary/02_Gradings_and_Rijal/Mujam_Rijal_al-Hadith
+          - key: Wasail_al-Shia
+            seed: columbia_aco002421
+            dest: 01_Priority_1_Shia_Primary/01_Hadith/Wasail_al-Shia
+          - key: al-Khilaf
+            seed: princeton_aco002234
+            dest: 03_Priority_3_Balance_Comparative_Academic/01_Comparative_Fiqh/al-Khilaf
+          - key: Kitab_Sulaym_ibn_Qays
+            seed: columbia_aco000724
+            dest: 01_Priority_1_Shia_Primary/06_Shared_Cited_Sources/Kitab_Sulaym_ibn_Qays
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      RCLONE_CONFIG_SRC_TYPE: drive
+      RCLONE_CONFIG_SRC_SCOPE: drive
+      RCLONE_CONFIG_SRC_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_SRC_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_SRC_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_SRC_ROOT_FOLDER_ID: 1yViD2pOHl5f4nUScGagv5IdE6GPV3xz_
+    steps:
+      - name: Install rclone
+        run: |
+          set -euo pipefail
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Resolve related ACO volumes
+        shell: bash
+        env:
+          SEED: ${{ matrix.seed }}
+          KEY: ${{ matrix.key }}
+        run: |
+          set -euo pipefail
+          mkdir -p audit work
+          python - <<'PY'
+          import json, os, re, urllib.request
+          seed=os.environ['SEED']
+          key=os.environ['KEY']
+          url=f'https://sites.dlib.nyu.edu/viewer/api/v1/books/{seed}'
+          req=urllib.request.Request(url, headers={'User-Agent':'source-library-acquisition/1.0'})
+          try:
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  data=json.load(r)
+          except Exception as e:
+              print('resource_api_error', repr(e))
+              data={}
+          txt=json.dumps(data, ensure_ascii=False)
+          ids=sorted(set(re.findall(r'(?:nyu|princeton|columbia|aub|uaena|cornell)_aco\d+', txt)))
+          if seed not in ids:
+              ids.insert(0, seed)
+          with open('audit/ids.txt','w') as f:
+              for x in ids: f.write(x+'\n')
+          with open('audit/resource.json','w') as f:
+              json.dump(data,f,ensure_ascii=False,indent=2)
+          print(key, 'resolved_ids=', len(ids), ids)
+          PY
+
+      - name: Download and publish resolved volumes
+        shell: bash
+        env:
+          KEY: ${{ matrix.key }}
+          DEST: ${{ matrix.dest }}
+        run: |
+          set -euo pipefail
+          printf 'key,aco_id,drive_path,source_url,bytes,sha256,status\n' > audit/manifest.csv
+          failures=0
+          while IFS= read -r ACO; do
+            [ -n "$ACO" ] || continue
+            URL="https://mc.dlib.nyu.edu/files/books/${ACO}/${ACO}_lo.pdf"
+            OUT="work/${KEY}_${ACO}.pdf"
+            REL="${DEST}/${KEY}_${ACO}.pdf"
+            echo "=== $KEY / $ACO ==="
+            if ! curl -L --fail --retry 6 --retry-all-errors --connect-timeout 30 --speed-time 90 --speed-limit 1024 -A 'Mozilla/5.0 source-library-acquisition' "$URL" -o "$OUT"; then
+              printf '%s,%s,%s,%s,,,%s\n' "$KEY" "$ACO" "$REL" "$URL" 'download_failed' >> audit/manifest.csv
+              failures=$((failures+1)); continue
+            fi
+            BYTES=$(stat -c%s "$OUT")
+            MAGIC=$(head -c 5 "$OUT" || true)
+            if [ "$BYTES" -lt 100000 ] || [ "$MAGIC" != "%PDF-" ]; then
+              printf '%s,%s,%s,%s,%s,,%s\n' "$KEY" "$ACO" "$REL" "$URL" "$BYTES" 'invalid_pdf' >> audit/manifest.csv
+              failures=$((failures+1)); rm -f "$OUT"; continue
+            fi
+            SHA=$(sha256sum "$OUT" | awk '{print $1}')
+            rclone copyto "$OUT" "src:$REL" --checksum --retries 5 --low-level-retries 10 --drive-chunk-size 64M
+            REMOTE_BYTES=$(rclone size "src:$REL" --json | python -c 'import json,sys; print(json.load(sys.stdin)["bytes"])')
+            STATUS=verified
+            if [ "$REMOTE_BYTES" != "$BYTES" ]; then STATUS=remote_size_mismatch; failures=$((failures+1)); fi
+            printf '%s,%s,%s,%s,%s,%s,%s\n' "$KEY" "$ACO" "$REL" "$URL" "$BYTES" "$SHA" "$STATUS" >> audit/manifest.csv
+            rm -f "$OUT"
+          done < audit/ids.txt
+          rclone copyto audit/manifest.csv "src:00_Catalog_and_Status/wave3_${KEY}_manifest.csv" --retries 5 --low-level-retries 10
+          rclone copyto audit/ids.txt "src:00_Catalog_and_Status/wave3_${KEY}_ids.txt" --retries 5 --low-level-retries 10
+          echo "failures=$failures" > audit/summary.txt
+          VERIFIED=$(awk -F, 'NR>1 && $7=="verified"{n++} END{print n+0}' audit/manifest.csv)
+          test "$VERIFIED" -gt 0
+
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-library-wave3-${{ matrix.key }}
+          path: audit/
+          retention-days: 90
+          if-no-files-found: error
