@@ -1,0 +1,132 @@
+name: Comparative Islamic source library acquisition
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/comparative-islamic-source-library.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      RCLONE_CONFIG_SRC_TYPE: drive
+      RCLONE_CONFIG_SRC_SCOPE: drive
+      RCLONE_CONFIG_SRC_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_SRC_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_SRC_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_SRC_ROOT_FOLDER_ID: 1yViD2pOHl5f4nUScGagv5IdE6GPV3xz_
+    steps:
+      - name: Install rclone
+        run: |
+          set -euo pipefail
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: Acquire verified public-domain ACO scans and publish to Drive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work audit
+          printf 'drive_path,aco_id,source_url,bytes,sha256,status\n' > audit/acquisition_manifest.csv
+
+          cat > audit/sources.tsv <<'EOF'
+01_Priority_1_Shia_Primary/01_Hadith/al-Kafi_v01_Arabic_ACO.pdf	princeton_aco001314
+01_Priority_1_Shia_Primary/01_Hadith/al-Kafi_v02_Arabic_ACO.pdf	princeton_aco001315
+01_Priority_1_Shia_Primary/01_Hadith/al-Kafi_v03_Arabic_ACO.pdf	princeton_aco001316
+01_Priority_1_Shia_Primary/01_Hadith/al-Kafi_v04_Arabic_ACO.pdf	princeton_aco001317
+01_Priority_1_Shia_Primary/01_Hadith/al-Kafi_v05_Arabic_ACO.pdf	princeton_aco001318
+01_Priority_1_Shia_Primary/01_Hadith/al-Kafi_v06_Arabic_ACO.pdf	princeton_aco001319
+01_Priority_1_Shia_Primary/01_Hadith/al-Kafi_v07_Arabic_ACO.pdf	princeton_aco001320
+01_Priority_1_Shia_Primary/01_Hadith/al-Kafi_v08_Arabic_ACO.pdf	princeton_aco001434
+01_Priority_1_Shia_Primary/01_Hadith/Man_La_Yahduruhu_al-Faqih_v01_Arabic_ACO.pdf	columbia_aco002226
+01_Priority_1_Shia_Primary/01_Hadith/Man_La_Yahduruhu_al-Faqih_v02_Arabic_ACO.pdf	columbia_aco002227
+01_Priority_1_Shia_Primary/01_Hadith/Man_La_Yahduruhu_al-Faqih_v03_Arabic_ACO.pdf	columbia_aco002229
+01_Priority_1_Shia_Primary/01_Hadith/Man_La_Yahduruhu_al-Faqih_v04_Arabic_ACO.pdf	columbia_aco002228
+01_Priority_1_Shia_Primary/01_Hadith/Nahj_al-Balagha_Arabic_ACO.pdf	princeton_aco001580
+01_Priority_1_Shia_Primary/02_Gradings_and_Rijal/Rijal_al-Kashshi_Arabic_ACO.pdf	nyu_aco000667
+01_Priority_1_Shia_Primary/03_Creed_and_Imamate/Kamal_al-Din_Arabic_ACO.pdf	columbia_aco003907
+01_Priority_1_Shia_Primary/03_Creed_and_Imamate/Aqaid_al-Imamiyya_al-Muzaffar_Arabic_ACO.pdf	nyu_aco000955
+01_Priority_1_Shia_Primary/04_Tahrif_Both_Sides/al-Bayan_fi_Tafsir_al-Quran_al-Khui_Arabic_ACO.pdf	princeton_aco000917
+01_Priority_1_Shia_Primary/05_Early_Sects/Firaq_al-Shia_al-Nawbakhti_Arabic_ACO.pdf	nyu_aco000948
+01_Priority_1_Shia_Primary/06_Shared_Cited_Sources/al-Ihtijaj_al-Tabarsi_Arabic_ACO.pdf	princeton_aco004786
+01_Priority_1_Shia_Primary/06_Shared_Cited_Sources/Tafsir_al-Qummi_v01_Arabic_ACO.pdf	nyu_aco000156
+01_Priority_1_Shia_Primary/06_Shared_Cited_Sources/Tafsir_al-Qummi_v02_Arabic_ACO.pdf	nyu_aco000157
+01_Priority_1_Shia_Primary/06_Shared_Cited_Sources/Sharh_Nahj_al-Balagha_Ibn_Abi_al-Hadid_Arabic_ACO.pdf	princeton_aco001746
+02_Priority_2_Sunni_Sources/01_Commentary/Nawawi_Sharh_Sahih_Muslim_v01-02_Arabic_ACO.pdf	aub_aco002246
+02_Priority_2_Sunni_Sources/01_Commentary/Nawawi_Sharh_Sahih_Muslim_v03-04_Arabic_ACO.pdf	aub_aco002247
+02_Priority_2_Sunni_Sources/01_Commentary/Nawawi_Sharh_Sahih_Muslim_v05-06_Arabic_ACO.pdf	aub_aco002248
+02_Priority_2_Sunni_Sources/01_Commentary/Nawawi_Sharh_Sahih_Muslim_v07-08_Arabic_ACO.pdf	aub_aco002249
+02_Priority_2_Sunni_Sources/01_Commentary/Nawawi_Sharh_Sahih_Muslim_v09-10_Arabic_ACO.pdf	aub_aco002250
+02_Priority_2_Sunni_Sources/03_History_and_Biography/al-Isaba_v01_Arabic_1905_ACO.pdf	uaena_aco000081
+02_Priority_2_Sunni_Sources/03_History_and_Biography/al-Isaba_v02_Arabic_1905_ACO.pdf	uaena_aco000082
+02_Priority_2_Sunni_Sources/03_History_and_Biography/al-Isaba_v03_Arabic_1905_ACO.pdf	uaena_aco000083
+02_Priority_2_Sunni_Sources/03_History_and_Biography/al-Isaba_v04_Arabic_1905_ACO.pdf	uaena_aco000084
+02_Priority_2_Sunni_Sources/04_Rijal/Mizan_al-Itidal_v01_Arabic_1907_ACO.pdf	columbia_aco003552
+02_Priority_2_Sunni_Sources/04_Rijal/Mizan_al-Itidal_v02_Arabic_1907_ACO.pdf	columbia_aco003553
+02_Priority_2_Sunni_Sources/05_Classical_Replies/Minhaj_al-Sunna_v01-02_Arabic_1904_ACO.pdf	columbia_aco001785
+02_Priority_2_Sunni_Sources/05_Classical_Replies/Minhaj_al-Sunna_v03-04_Arabic_1904_ACO.pdf	columbia_aco001786
+03_Priority_3_Balance_Comparative_Academic/01_Comparative_Fiqh/al-Khilaf_al-Tusi_v01_Arabic_ACO.pdf	princeton_aco002234
+03_Priority_3_Balance_Comparative_Academic/01_Comparative_Fiqh/al-Khilaf_al-Tusi_v02_Arabic_ACO.pdf	princeton_aco001844
+03_Priority_3_Balance_Comparative_Academic/01_Comparative_Fiqh/al-Khilaf_al-Tusi_juz04_Arabic_ACO.pdf	princeton_aco002484
+03_Priority_3_Balance_Comparative_Academic/02_Shia_Replies/Abdullah_ibn_Saba_wa_Asatir_Ukhra_al-Askari_Arabic_ACO.pdf	princeton_aco001239
+EOF
+
+          failures=0
+          while IFS=$'\t' read -r REL ACO; do
+            [ -n "$REL" ] || continue
+            URL="https://mc.dlib.nyu.edu/files/books/${ACO}/${ACO}_lo.pdf"
+            OUT="work/$(basename "$REL")"
+            echo "=== $REL ==="
+            rm -f "$OUT"
+
+            if ! curl -L --fail --retry 6 --retry-all-errors --connect-timeout 30 \
+                 --speed-time 90 --speed-limit 1024 \
+                 -A 'Mozilla/5.0 source-library-acquisition' \
+                 "$URL" -o "$OUT"; then
+              printf '%s,%s,%s,,,%s\n' "$REL" "$ACO" "$URL" 'download_failed' >> audit/acquisition_manifest.csv
+              failures=$((failures+1))
+              continue
+            fi
+
+            BYTES=$(stat -c%s "$OUT")
+            MAGIC=$(head -c 5 "$OUT" || true)
+            if [ "$BYTES" -lt 100000 ] || [ "$MAGIC" != "%PDF-" ]; then
+              printf '%s,%s,%s,%s,,%s\n' "$REL" "$ACO" "$URL" "$BYTES" 'invalid_pdf' >> audit/acquisition_manifest.csv
+              failures=$((failures+1))
+              rm -f "$OUT"
+              continue
+            fi
+
+            SHA=$(sha256sum "$OUT" | awk '{print $1}')
+            rclone copyto "$OUT" "src:$REL" \
+              --checksum --retries 5 --low-level-retries 10 --drive-chunk-size 64M
+
+            REMOTE_BYTES=$(rclone size "src:$REL" --json | python -c 'import json,sys; print(json.load(sys.stdin)["bytes"])')
+            if [ "$REMOTE_BYTES" != "$BYTES" ]; then
+              printf '%s,%s,%s,%s,%s,%s\n' "$REL" "$ACO" "$URL" "$BYTES" "$SHA" 'remote_size_mismatch' >> audit/acquisition_manifest.csv
+              failures=$((failures+1))
+            else
+              printf '%s,%s,%s,%s,%s,%s\n' "$REL" "$ACO" "$URL" "$BYTES" "$SHA" 'verified' >> audit/acquisition_manifest.csv
+            fi
+            rm -f "$OUT"
+          done < audit/sources.tsv
+
+          rclone copyto audit/acquisition_manifest.csv "src:00_Catalog_and_Status/acquisition_manifest.csv" --retries 5 --low-level-retries 10
+          rclone copyto audit/sources.tsv "src:00_Catalog_and_Status/aco_sources.tsv" --retries 5 --low-level-retries 10
+          rclone lsf "src:" --dirs-only | tee audit/root_listing.txt
+          echo "failures=$failures" | tee audit/summary.txt
+          VERIFIED=$(awk -F, 'NR>1 && $6=="verified"{n++} END{print n+0}' audit/acquisition_manifest.csv)
+          test "$VERIFIED" -gt 0
+
+      - name: Upload acquisition audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparative-islamic-source-library-audit
+          path: audit/
+          retention-days: 90
+          if-no-files-found: error
