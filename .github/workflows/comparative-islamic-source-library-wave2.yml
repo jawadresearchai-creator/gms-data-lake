@@ -1,0 +1,83 @@
+name: Comparative Islamic source library acquisition wave 2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/comparative-islamic-source-library-wave2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      RCLONE_CONFIG_SRC_TYPE: drive
+      RCLONE_CONFIG_SRC_SCOPE: drive
+      RCLONE_CONFIG_SRC_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_SRC_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_SRC_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_SRC_ROOT_FOLDER_ID: 1yViD2pOHl5f4nUScGagv5IdE6GPV3xz_
+    steps:
+      - name: Install rclone
+        run: |
+          set -euo pipefail
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Acquire Tahdhib and Ghayba
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work audit
+          printf 'drive_path,aco_id,source_url,bytes,sha256,status\n' > audit/acquisition_manifest_wave2.csv
+          cat > audit/sources.txt <<'EOF'
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz01_Arabic_ACO.pdf|princeton_aco004307
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz02_Arabic_ACO.pdf|princeton_aco004308
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz03_Arabic_ACO.pdf|princeton_aco004309
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz04_Arabic_ACO.pdf|princeton_aco004310
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz05_Arabic_ACO.pdf|princeton_aco004311
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz06_Arabic_ACO.pdf|princeton_aco004312
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz07_Arabic_ACO.pdf|princeton_aco004313
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz08_Arabic_ACO.pdf|princeton_aco004314
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz09_Arabic_ACO.pdf|princeton_aco004315
+          01_Priority_1_Shia_Primary/01_Hadith/Tahdhib_al-Ahkam_juz10_Arabic_ACO.pdf|princeton_aco004316
+          01_Priority_1_Shia_Primary/03_Creed_and_Imamate/al-Ghayba_al-Tusi_Arabic_ACO.pdf|princeton_aco001181
+          EOF
+
+          failures=0
+          while IFS='|' read -r REL ACO; do
+            [ -n "$REL" ] || continue
+            URL="https://mc.dlib.nyu.edu/files/books/${ACO}/${ACO}_lo.pdf"
+            OUT="work/$(basename "$REL")"
+            if ! curl -L --fail --retry 6 --retry-all-errors --connect-timeout 30 --speed-time 90 --speed-limit 1024 -A 'Mozilla/5.0 source-library-acquisition' "$URL" -o "$OUT"; then
+              printf '%s,%s,%s,,,%s\n' "$REL" "$ACO" "$URL" 'download_failed' >> audit/acquisition_manifest_wave2.csv
+              failures=$((failures+1)); continue
+            fi
+            BYTES=$(stat -c%s "$OUT")
+            MAGIC=$(head -c 5 "$OUT" || true)
+            if [ "$BYTES" -lt 100000 ] || [ "$MAGIC" != "%PDF-" ]; then
+              printf '%s,%s,%s,%s,,%s\n' "$REL" "$ACO" "$URL" "$BYTES" 'invalid_pdf' >> audit/acquisition_manifest_wave2.csv
+              failures=$((failures+1)); rm -f "$OUT"; continue
+            fi
+            SHA=$(sha256sum "$OUT" | awk '{print $1}')
+            rclone copyto "$OUT" "src:$REL" --checksum --retries 5 --low-level-retries 10 --drive-chunk-size 64M
+            REMOTE_BYTES=$(rclone size "src:$REL" --json | python -c 'import json,sys; print(json.load(sys.stdin)["bytes"])')
+            STATUS=verified
+            if [ "$REMOTE_BYTES" != "$BYTES" ]; then STATUS=remote_size_mismatch; failures=$((failures+1)); fi
+            printf '%s,%s,%s,%s,%s,%s\n' "$REL" "$ACO" "$URL" "$BYTES" "$SHA" "$STATUS" >> audit/acquisition_manifest_wave2.csv
+            rm -f "$OUT"
+          done < audit/sources.txt
+          rclone copyto audit/acquisition_manifest_wave2.csv "src:00_Catalog_and_Status/acquisition_manifest_wave2.csv" --retries 5 --low-level-retries 10
+          echo "failures=$failures" > audit/summary_wave2.txt
+          VERIFIED=$(awk -F, 'NR>1 && $6=="verified"{n++} END{print n+0}' audit/acquisition_manifest_wave2.csv)
+          test "$VERIFIED" -gt 0
+
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparative-islamic-source-library-wave2-audit
+          path: audit/
+          retention-days: 90
+          if-no-files-found: error
