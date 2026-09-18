@@ -1,0 +1,116 @@
+name: Full OCR Hadith Books
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/full-hadith-ocr.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include:
+          - {key: bukhari_ar_ur, file: "01 - Sahih al-Bukhari (Arabic & Urdu Complete) - Imam Bukhari.pdf", lang: "urd+ara+eng", start: 1, end: 1058}
+          - {key: bukhari_ar_ur, file: "01 - Sahih al-Bukhari (Arabic & Urdu Complete) - Imam Bukhari.pdf", lang: "urd+ara+eng", start: 1059, end: 2116}
+          - {key: bukhari_ar_ur, file: "01 - Sahih al-Bukhari (Arabic & Urdu Complete) - Imam Bukhari.pdf", lang: "urd+ara+eng", start: 2117, end: 3174}
+          - {key: bukhari_ar_ur, file: "01 - Sahih al-Bukhari (Arabic & Urdu Complete) - Imam Bukhari.pdf", lang: "urd+ara+eng", start: 3175, end: 4232}
+          - {key: bukhari_ar_ur, file: "01 - Sahih al-Bukhari (Arabic & Urdu Complete) - Imam Bukhari.pdf", lang: "urd+ara+eng", start: 4233, end: 5287}
+
+          - {key: muslim_ar_ur, file: "02 - Sahih Muslim (Arabic & Urdu Complete) - Imam Muslim.pdf", lang: "urd+ara+eng", start: 1, end: 907}
+          - {key: muslim_ar_ur, file: "02 - Sahih Muslim (Arabic & Urdu Complete) - Imam Muslim.pdf", lang: "urd+ara+eng", start: 908, end: 1814}
+          - {key: muslim_ar_ur, file: "02 - Sahih Muslim (Arabic & Urdu Complete) - Imam Muslim.pdf", lang: "urd+ara+eng", start: 1815, end: 2721}
+          - {key: muslim_ar_ur, file: "02 - Sahih Muslim (Arabic & Urdu Complete) - Imam Muslim.pdf", lang: "urd+ara+eng", start: 2722, end: 3627}
+
+          - {key: bukhari_en, file: "03 - Sahih al-Bukhari (English - M. Muhsin Khan).pdf", lang: "eng", start: 1, end: 850}
+          - {key: bukhari_en, file: "03 - Sahih al-Bukhari (English - M. Muhsin Khan).pdf", lang: "eng", start: 851, end: 1700}
+
+          - {key: muslim_en, file: "04 - Sahih Muslim (English - Abd-al-Hamid Siddiqui).pdf", lang: "eng", start: 1, end: 900}
+          - {key: muslim_en, file: "04 - Sahih Muslim (English - Abd-al-Hamid Siddiqui).pdf", lang: "eng", start: 901, end: 1800}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OCR dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara tesseract-ocr-urd
+          python -m pip install --upgrade pip
+          pip install pymupdf pytesseract pillow
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Download source PDF
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: "1nl1fTFDYliyW0XYnA1udyZB4hCpwvSqA"
+        run: |
+          mkdir -p source out
+          rclone copyto "gdrive:${{ matrix.file }}" "source/${{ matrix.file }}" --transfers 1 --checkers 4
+
+      - name: OCR page images
+        run: |
+          python scripts/full_ocr_chunk.py             --pdf "source/${{ matrix.file }}"             --start ${{ matrix.start }}             --end ${{ matrix.end }}             --lang "${{ matrix.lang }}"             --key "${{ matrix.key }}"             --out out             --workers 2             --zoom 2.6             --psm 3
+
+      - name: Upload OCR chunk to Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: "1Ol9husPZ55NzwRNE4utWfwYFqY72Po3w"
+        run: |
+          rclone copy out "gdrive:chunks/${{ matrix.key }}" --transfers 2 --checkers 4
+
+  merge:
+    needs: ocr
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rclone
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Download all OCR chunks
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: "1Ol9husPZ55NzwRNE4utWfwYFqY72Po3w"
+        run: |
+          mkdir -p chunks merged
+          rclone copy gdrive:chunks chunks --include "*.jsonl" --include "*_qa.json"
+
+      - name: Merge and audit OCR corpus
+        run: python scripts/full_ocr_merge.py --chunks chunks --out merged
+
+      - name: Upload merged OCR corpus
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: "1Ol9husPZ55NzwRNE4utWfwYFqY72Po3w"
+        run: |
+          rclone copy merged gdrive:merged --transfers 4 --checkers 8
+
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-hadith-ocr-audit
+          path: merged/
+          retention-days: 30
