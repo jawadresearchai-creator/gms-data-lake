@@ -1,0 +1,64 @@
+name: Build Audited Hadith Corpus
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/hadith-corpus.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara tesseract-ocr-urd
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pymupdf pytesseract pillow
+
+      - name: Download source books from Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: "1nl1fTFDYliyW0XYnA1udyZB4hCpwvSqA"
+        run: |
+          mkdir -p source output
+          rclone copy gdrive: source --include "*.pdf" --transfers 4 --checkers 8
+          ls -lh source
+
+      - name: Build page-level corpus, audit, and Namaz topic index
+        run: |
+          python scripts/hadith_corpus_pipeline.py --source source --output output
+
+      - name: Upload corpus to Drive
+        env:
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive
+          RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: "1nl1fTFDYliyW0XYnA1udyZB4hCpwvSqA"
+        run: |
+          rclone copy output gdrive:05_Audited_Text_Corpus --transfers 4 --checkers 8
+          rclone lsf -R gdrive:05_Audited_Text_Corpus | head -200
+
+      - name: Preserve audit package as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: audited-hadith-corpus
+          path: output/
+          retention-days: 30
